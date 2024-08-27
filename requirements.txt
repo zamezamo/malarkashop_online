@@ -1,0 +1,2 @@
+django==5.1
+aiogram==3.12.0
