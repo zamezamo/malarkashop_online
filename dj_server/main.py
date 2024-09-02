@@ -34,10 +34,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Define configuration constants
-URL = "https://domain.tld"
-ADMIN_CHAT_ID = 123456
+URL = "https://bdd6-178-124-178-90.ngrok-free.app"
+ADMIN_CHAT_ID = 542399495 # @zamezamo
 PORT = 8000
-TOKEN = "123:ABC"  # nosec B105
+TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # nosec B105
 
 
 @dataclass
