@@ -1,17 +1,12 @@
-# example from doc
-
 import asyncio
 import html
 import json
 import logging
 from dataclasses import dataclass
-from uuid import uuid4
 
 import uvicorn
-from django.conf import settings
-from django.core.asgi import get_asgi_application
+from dj_server.asgi import application
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
-from django.urls import path
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -24,6 +19,8 @@ from telegram.ext import (
     TypeHandler,
 )
 
+import dj_server.config as CONFIG
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -32,13 +29,6 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
-
-# Define configuration constants
-URL = "https://bdd6-178-124-178-90.ngrok-free.app"
-ADMIN_CHAT_ID = 542399495 # @zamezamo
-PORT = 8000
-TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # nosec B105
-
 
 @dataclass
 class WebhookUpdate:
@@ -64,16 +54,21 @@ class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
             return cls(application=application, user_id=update.user_id)
         return super().from_update(update, application)
 
-
 async def start(update: Update, context: CustomContext) -> None:
-    """Display a message with instructions on how to use this bot."""
-    payload_url = html.escape(f"{URL}/submitpayload?user_id=<your user id>&payload=<payload>")
-    text = (
-        f"To check if the bot is still running, call <code>{URL}/healthcheck</code>.\n\n"
-        f"To post a custom update, call <code>{payload_url}</code>."
-    )
-    await update.message.reply_html(text=text)
+    "Display start message"
 
+    text = (
+        f"Добро пожаловать в *{CONFIG.TITLE}*!\n"
+        f"\n"
+        f"Для того чтобы перейти в каталог нажмите _кнопку_ ниже\n"
+        f"Подписывайтесь на наш [канал]({CONFIG.BOT_LINK})!"
+        )
+    
+    await update.message.reply_photo(
+        photo=f"{CONFIG.URL}/static/img/bot/logo.jpg",
+        caption=text,
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
     """Handle custom updates."""
@@ -85,22 +80,11 @@ async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
         f"The user {chat_member.user.mention_html()} has sent a new payload. "
         f"So far they have sent the following payloads: \n\n• <code>{combined_payloads}</code>"
     )
-    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
-
-
-async def telegram(request: HttpRequest) -> HttpResponse:
-    """Handle incoming Telegram updates by putting them into the `update_queue`"""
-    await ptb_application.update_queue.put(
-        Update.de_json(data=json.loads(request.body), bot=ptb_application.bot)
-    )
-    return HttpResponse()
-
+    await context.bot.send_message(chat_id=CONFIG.ADMIN_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
 
 async def custom_updates(request: HttpRequest) -> HttpResponse:
-    """
-    Handle incoming webhook updates by also putting them into the `update_queue` if
-    the required parameters were passed correctly.
-    """
+    """Handle incoming webhook updates"""
+
     try:
         user_id = int(request.GET["user_id"])
         payload = request.GET["payload"]
@@ -114,53 +98,35 @@ async def custom_updates(request: HttpRequest) -> HttpResponse:
     await ptb_application.update_queue.put(WebhookUpdate(user_id=user_id, payload=payload))
     return HttpResponse()
 
-
-async def health(_: HttpRequest) -> HttpResponse:
-    """For the health endpoint, reply with a simple plain text message."""
-    return HttpResponse("The bot is still running fine :)")
-
-
 # Set up PTB application and a web application for handling the incoming requests.
-
 context_types = ContextTypes(context=CustomContext)
-# Here we set updater to None because we want our custom webhook server to handle the updates
-# and hence we don't need an Updater instance
 ptb_application = (
-    Application.builder().token(TOKEN).updater(None).context_types(context_types).build()
+    Application.builder().token(CONFIG.TOKEN).updater(None).context_types(context_types).build()
 )
 
-# register handlers
+# Register handlers
 ptb_application.add_handler(CommandHandler("start", start))
-ptb_application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
-
-urlpatterns = [
-    path("telegram", telegram, name="Telegram updates"),
-    path("submitpayload", custom_updates, name="custom updates"),
-    path("healthcheck", health, name="health check"),
-]
-settings.configure(ROOT_URLCONF=__name__, SECRET_KEY=uuid4().hex)
-
 
 async def main() -> None:
     """Finalize configuration and run the applications."""
+
     webserver = uvicorn.Server(
         config=uvicorn.Config(
-            app=get_asgi_application(),
-            port=PORT,
+            app=application,
+            port=CONFIG.PORT,
             use_colors=False,
             host="127.0.0.1",
         )
     )
 
     # Pass webhook settings to telegram
-    await ptb_application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
+    await ptb_application.bot.set_webhook(url=f"{CONFIG.URL}/telegram", allowed_updates=Update.ALL_TYPES)
 
     # Run application and webserver together
     async with ptb_application:
         await ptb_application.start()
         await webserver.serve()
         await ptb_application.stop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
