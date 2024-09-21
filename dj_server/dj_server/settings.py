@@ -26,11 +26,7 @@ SECRET_KEY = 'django-insecure-ovot)!0lvg8x9z+8u#ci(o9-oe!_7!iivu#%^@-k9j=##sio47
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    'bdd6-178-124-178-90.ngrok-free.app',
-]
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -48,6 +44,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -123,13 +122,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR / "app_bot", "static")
+STATIC_ROOT = os.path.join(
+    BASE_DIR / "app_bot", "static"
+)
 
 STATICFILES_DIRS = []
+
+MEDIA_ROOT = (
+    os.path.join(BASE_DIR, 'uploads')
+)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-TITLE = 'AutoCustomersStore'
