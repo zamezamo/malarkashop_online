@@ -8,15 +8,21 @@ import uvicorn
 from dj_server.asgi import application
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 
-from telegram import Update
 from telegram.constants import ParseMode
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    )
 from telegram.ext import (
     Application,
     CallbackContext,
     CommandHandler,
     ContextTypes,
     ExtBot,
-    TypeHandler,
+    CallbackQueryHandler,
+    ConversationHandler
 )
 
 import dj_server.config as CONFIG
@@ -29,6 +35,11 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+states = {
+    "CHOOSE_CATEGORY": 0,
+    "IN_CATEGORY": 1
+}
 
 @dataclass
 class WebhookUpdate:
@@ -57,17 +68,62 @@ class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
 async def start(update: Update, context: CustomContext) -> None:
     "Display start message"
 
-    text = (
-        f"Добро пожаловать в *{CONFIG.TITLE}*!\n"
-        f"\n"
-        f"Для того чтобы перейти в каталог нажмите _кнопку_ ниже\n"
-        f"Подписывайтесь на наш [канал]({CONFIG.BOT_LINK})!"
-        )
+    text = CONFIG.START_TEXT
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("перейти в каталог", callback_data=states["CHOOSE_CATEGORY"]),
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_photo(
         photo=f"{CONFIG.URL}/static/img/bot/logo.jpg",
         caption=text,
         parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
+
+    return states["CHOOSE_CATEGORY"]
+
+async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    await query.answer()
+
+    text=f"\n_выберите категорию товара ниже:_"
+    keyboard = [
+        [InlineKeyboardButton(button_name, callback_data=button_item)] 
+            for button_item, button_name in CONFIG.CATEGORY_CHOICES.items()
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_media(
+        media=InputMediaPhoto(
+            media=f"{CONFIG.URL}/static/img/bot/in_catalog.jpg",
+            caption=text,
+            parse_mode=ParseMode.MARKDOWN,
+        ),
+        reply_markup=reply_markup
+    )
+
+    return states["IN_CATEGORY"]
+
+async def in_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    await query.answer()
+
+    text=f"\n_выбранная категория:_ {CONFIG.CATEGORY_CHOICES[query.data]}"
+
+    await query.edit_message_media(
+        media=InputMediaPhoto(
+            media=f"{CONFIG.URL}/static/img/categories/{query.data}.jpg",
+            caption=text,
+            parse_mode=ParseMode.MARKDOWN,
+        )
     )
 
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
@@ -105,7 +161,17 @@ ptb_application = (
 )
 
 # Register handlers
-ptb_application.add_handler(CommandHandler("start", start))
+ptb_application.add_handler(
+    ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            states["CHOOSE_CATEGORY"]: [CallbackQueryHandler(choose_category)],
+            states["IN_CATEGORY"]: [CallbackQueryHandler(in_category)],
+        },
+        fallbacks=[CommandHandler("start", start)],
+        per_message=False,
+    )
+)
 
 async def main() -> None:
     """Finalize configuration and run the applications."""
