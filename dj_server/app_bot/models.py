@@ -5,6 +5,9 @@ from django.db import models
 from dj_server.config import CATEGORY_CHOICES
 
 # Create your models here.
+def default_parts_list():
+    """part_{id}: count"""
+    return list({"part_0": 0})
 
 class Admin(models.Model):
     admin_id = models.BigIntegerField()
@@ -16,23 +19,25 @@ class User(models.Model):
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=64)
-    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, default=CATEGORY_CHOICES["OTHER"])
+    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, default="OTHER")
     description = models.TextField(max_length=256)
     available_count = models.IntegerField(default=0)
-    image = models.FileField(upload_to="settings.MEDIA_ROOT/img/parts", default="no_img_part.jpg", name=f"part_{name}_{part_id}")
-
+    image = models.FileField(
+        upload_to="img/parts",
+        default="img/parts/no_img_part.jpg"
+    )
 class Order(models.Model):
     order_id = models.BigAutoField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
-    parts = models.JSONField(default={})
-    ordered_time = models.DateTimeField(default=datetime.now())
+    parts = models.JSONField(default=default_parts_list)
+    ordered_time = models.DateTimeField()
     is_accepted = models.BooleanField(default=False)
-    accepted_time = models.DateTimeField(default=datetime.now())
+    accepted_time = models.DateTimeField()
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
     user_id = models.BigIntegerField()
-    parts = models.JSONField(default={})
-    ordered_time = models.DateTimeField(default=datetime.now())
-    accepted_time = models.DateTimeField(default=datetime.now())
-    completed_time = models.DateTimeField(default=datetime.now())
+    parts = models.JSONField(default=default_parts_list)
+    ordered_time = models.DateTimeField()
+    accepted_time = models.DateTimeField()
+    completed_time = models.DateTimeField()
