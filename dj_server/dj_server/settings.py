@@ -44,9 +44,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -109,9 +106,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-ru'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Minsk'
 
 USE_I18N = True
 
@@ -126,11 +123,14 @@ STATIC_ROOT = os.path.join(
     BASE_DIR / "app_bot", "static"
 )
 
-STATICFILES_DIRS = []
+STATICFILES_DIRS = [
+
+]
 
 MEDIA_ROOT = (
-    os.path.join(BASE_DIR, 'uploads')
+    os.path.join(BASE_DIR / "app_bot", 'uploads')
 )
+MEDIA_URL = 'uploads/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
