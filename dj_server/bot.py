@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 import uvicorn
+
 from dj_server.asgi import application
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 
@@ -36,9 +37,19 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-states = {
+top_states = {
     "CHOOSE_CATEGORY": 0,
-    "IN_CATEGORY": 1
+    "CATEGORY_CARDS": 1
+}
+
+category_cards_states = {
+    "PREVIOUS": 0,
+    "NEXT": 1,
+    "ADD": 2,
+    "ENTER_COUNT": 3,
+    "REMOVE": 4,
+    "INTO_CART": 5,
+    "BACK": 6
 }
 
 @dataclass
@@ -65,17 +76,16 @@ class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
             return cls(application=application, user_id=update.user_id)
         return super().from_update(update, application)
 
+
 async def start(update: Update, context: CustomContext) -> None:
-    "Display start message"
+    """Display start message"""
 
     text = CONFIG.START_TEXT
-    
     keyboard = [
         [
-            InlineKeyboardButton("перейти в каталог", callback_data=states["CHOOSE_CATEGORY"]),
+            InlineKeyboardButton("🛍 перейти в каталог", callback_data=top_states["CHOOSE_CATEGORY"]),
         ]
     ]
-
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_photo(
@@ -85,19 +95,21 @@ async def start(update: Update, context: CustomContext) -> None:
         reply_markup=reply_markup
     )
 
-    return states["CHOOSE_CATEGORY"]
+    return top_states["CHOOSE_CATEGORY"]
 
-async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display a message to the user to select a product category"""
+
     query = update.callback_query
 
     await query.answer()
 
-    text=f"\n_выберите категорию товара ниже:_"
+    text = CONFIG.CHOOSE_CATEGORY_TEXT
     keyboard = [
         [InlineKeyboardButton(button_name, callback_data=button_item)] 
             for button_item, button_name in CONFIG.CATEGORY_CHOICES.items()
     ]
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_media(
@@ -109,14 +121,35 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-    return states["IN_CATEGORY"]
+    return top_states["CATEGORY_CARDS"]
 
-async def in_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Display all products in this category as cards"""
+    
     query = update.callback_query
 
     await query.answer()
 
-    text=f"\n_выбранная категория:_ {CONFIG.CATEGORY_CHOICES[query.data]}"
+    text = CONFIG.CATEGORY_CARDS_TEXT(query.data)
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data=category_cards_states["PREVIOUS"]),
+            InlineKeyboardButton("➡️", callback_data=category_cards_states["NEXT"]),
+        ],
+        [
+            InlineKeyboardButton("➕", callback_data=category_cards_states["ADD"]),
+            InlineKeyboardButton("ввести кол-во", callback_data=category_cards_states["ENTER_COUNT"]),
+            InlineKeyboardButton("➖", callback_data=category_cards_states["REMOVE"]),
+        ],
+        [
+            InlineKeyboardButton("🛒в корзину", callback_data=category_cards_states["INTO_CART"])
+        ],
+        [
+            InlineKeyboardButton("🔙назад", callback_data=category_cards_states["BACK"])
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_media(
         media=InputMediaPhoto(
@@ -125,6 +158,21 @@ async def in_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
         )
     )
+
+
+async def change_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Change product card"""
+
+    query = update.callback_query
+
+    await query.answer()
+    
+    match 
+
+
+async def cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
 
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
     """Handle custom updates."""
@@ -137,6 +185,7 @@ async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
         f"So far they have sent the following payloads: \n\n• <code>{combined_payloads}</code>"
     )
     await context.bot.send_message(chat_id=CONFIG.ADMIN_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
+
 
 async def custom_updates(request: HttpRequest) -> HttpResponse:
     """Handle incoming webhook updates"""
@@ -154,24 +203,27 @@ async def custom_updates(request: HttpRequest) -> HttpResponse:
     await ptb_application.update_queue.put(WebhookUpdate(user_id=user_id, payload=payload))
     return HttpResponse()
 
+
 # Set up PTB application and a web application for handling the incoming requests.
 context_types = ContextTypes(context=CustomContext)
 ptb_application = (
     Application.builder().token(CONFIG.TOKEN).updater(None).context_types(context_types).build()
 )
 
+
 # Register handlers
 ptb_application.add_handler(
     ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            states["CHOOSE_CATEGORY"]: [CallbackQueryHandler(choose_category)],
-            states["IN_CATEGORY"]: [CallbackQueryHandler(in_category)],
+            top_states["CHOOSE_CATEGORY"]: [CallbackQueryHandler(choose_category)],
+            top_states["CATEGORY_CARDS"]: [CallbackQueryHandler(category_cards)],
         },
         fallbacks=[CommandHandler("start", start)],
         per_message=False,
     )
 )
+
 
 async def main() -> None:
     """Finalize configuration and run the applications."""
@@ -193,6 +245,7 @@ async def main() -> None:
         await ptb_application.start()
         await webserver.serve()
         await ptb_application.stop()
+        
 
 if __name__ == "__main__":
     asyncio.run(main())

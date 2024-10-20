@@ -16,6 +16,17 @@ START_TEXT = (
     f"Для того чтобы перейти в каталог нажмите _кнопку_ ниже\n"
 )
 
+CHOOSE_CATEGORY_TEXT = (
+    f"\n_выберите категорию товара ниже:_"
+)
+
+def CATEGORY_CARDS_TEXT(category: str, name: str, available_count: int, description: str):
+    return (
+        f"[**{CATEGORY_CHOICES[category]}**]\n"
+        f"\n\n"
+        f""
+    )
+
 CATEGORY_CHOICES = {
     "ABRAS_MATHERIALS": "абразивные материалы",
     "POLISHING_WHEELS": "полировальные круги",
