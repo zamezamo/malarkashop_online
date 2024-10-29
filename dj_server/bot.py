@@ -1,13 +1,12 @@
 import asyncio
-import html
-import json
 import logging
 from dataclasses import dataclass
 
 import uvicorn
-
 from dj_server.asgi import application
+
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
+from asgiref.sync import sync_to_async
 
 from telegram.constants import ParseMode
 from telegram import (
@@ -26,6 +25,7 @@ from telegram.ext import (
     ConversationHandler
 )
 
+import app_bot.models as models
 import dj_server.config as CONFIG
 
 # Enable logging
@@ -37,19 +37,21 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+SPLIT_SYM = "_"
+
 top_states = {
     "CHOOSE_CATEGORY": 0,
-    "CATEGORY_CARDS": 1
+    "CATEGORY_CARDS": 1,
+    "PRODUCT_CARDS": 2,
 }
 
-category_cards_states = {
-    "PREVIOUS": 0,
-    "NEXT": 1,
-    "ADD": 2,
-    "ENTER_COUNT": 3,
-    "REMOVE": 4,
-    "INTO_CART": 5,
-    "BACK": 6
+product_card_states = {
+    "PREVIOUS": 20,
+    "NEXT": 21,
+    "ADD": 22,
+    "ENTER_COUNT": 23,
+    "REMOVE": 24,
+    "INTO_CART": 25,
 }
 
 @dataclass
@@ -107,7 +109,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     text = CONFIG.CHOOSE_CATEGORY_TEXT
     keyboard = [
-        [InlineKeyboardButton(button_name, callback_data=button_item)] 
+        [InlineKeyboardButton(button_name, callback_data=str(top_states["CATEGORY_CARDS"]) + SPLIT_SYM + button_item)] 
             for button_item, button_name in CONFIG.CATEGORY_CHOICES.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -125,53 +127,96 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Display all products in this category as cards"""
+    """Display all products in this category"""
     
     query = update.callback_query
+    data = query.data.split(SPLIT_SYM, 1)[1]
 
     await query.answer()
 
-    text = CONFIG.CATEGORY_CARDS_TEXT(query.data)
+    parts = models.Part.objects.filter(category=data).values("name", "available_count")
+
+    text = (
+        f"*[{CONFIG.CATEGORY_CHOICES[data]}]*\n"
+        f"\n\n"
+    )
+
+    if await sync_to_async(bool)(parts) == True:
+        text += (
+            f"В наличии:\n\n"
+        )
+        async for part in parts:
+            text += f" ●  *{part["name"]}*, {part["available_count"]}шт.\n"
+    else:
+        text += (
+            f"Пока здесь пусто.."
+        )
+
     keyboard = [
         [
-            InlineKeyboardButton("⬅️", callback_data=category_cards_states["PREVIOUS"]),
-            InlineKeyboardButton("➡️", callback_data=category_cards_states["NEXT"]),
+            InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT_SYM + data),
         ],
         [
-            InlineKeyboardButton("➕", callback_data=category_cards_states["ADD"]),
-            InlineKeyboardButton("ввести кол-во", callback_data=category_cards_states["ENTER_COUNT"]),
-            InlineKeyboardButton("➖", callback_data=category_cards_states["REMOVE"]),
-        ],
-        [
-            InlineKeyboardButton("🛒в корзину", callback_data=category_cards_states["INTO_CART"])
-        ],
-        [
-            InlineKeyboardButton("🔙назад", callback_data=category_cards_states["BACK"])
+            InlineKeyboardButton("↩️назад", callback_data=top_states["CHOOSE_CATEGORY"])
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{CONFIG.URL}/static/img/categories/{query.data}.jpg",
+            media=f"{CONFIG.URL}/static/img/categories/{data}.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
-        )
+        ),
+        reply_markup=reply_markup
     )
 
+    return top_states["CATEGORY_CARDS"]
 
-async def change_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Change product card"""
+
+async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Display all info about chosen product in this category"""
+
+    #TODO: realize functional
 
     query = update.callback_query
+    data = query.data.split(SPLIT_SYM, 1)[1]
 
     await query.answer()
-    
-    match 
 
+    text = (
+        f"*PRODUCT CARD*\n"
+    )
 
-async def cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data=product_card_states["PREVIOUS"]),
+            InlineKeyboardButton("➡️", callback_data=product_card_states["NEXT"]),
+        ],
+        [
+            InlineKeyboardButton("➕", callback_data=product_card_states["ADD"]),
+            InlineKeyboardButton("ввести кол-во", callback_data=product_card_states["ENTER_COUNT"]),
+            InlineKeyboardButton("➖", callback_data=product_card_states["REMOVE"]),
+        ],
+        [
+            InlineKeyboardButton("🛒в корзину", callback_data=product_card_states["INTO_CART"])
+        ],
+        [
+            InlineKeyboardButton("↩️назад", callback_data=top_states["CHOOSE_CATEGORY"])
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await query.edit_message_media(
+        media=InputMediaPhoto(
+            media=f"{CONFIG.URL}/static/img/bot/logo.jpg",
+            caption=text,
+            parse_mode=ParseMode.MARKDOWN,
+        ),
+        reply_markup=reply_markup
+    )
+
+    return top_states["PRODUCT_CARDS"]
 
 
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
@@ -216,8 +261,32 @@ ptb_application.add_handler(
     ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            top_states["CHOOSE_CATEGORY"]: [CallbackQueryHandler(choose_category)],
-            top_states["CATEGORY_CARDS"]: [CallbackQueryHandler(category_cards)],
+            top_states["CHOOSE_CATEGORY"]: [
+                CallbackQueryHandler(
+                    choose_category, 
+                    pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
+                )
+            ],
+            top_states["CATEGORY_CARDS"]: [
+                CallbackQueryHandler(
+                    category_cards,
+                    pattern="^" + str(top_states["CATEGORY_CARDS"]) + "_[A-Z]{1,8}$"
+                ),
+                CallbackQueryHandler(
+                    choose_category, 
+                    pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    product_cards,
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
+                ),
+            ],
+            top_states["PRODUCT_CARDS"]: [
+                CallbackQueryHandler(
+                    choose_category, 
+                    pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
+                )
+            ]
         },
         fallbacks=[CommandHandler("start", start)],
         per_message=False,
