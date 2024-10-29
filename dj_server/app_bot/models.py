@@ -18,13 +18,13 @@ class User(models.Model):
 
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
-    name = models.CharField(max_length=64)
-    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, default="OTHER")
+    name = models.CharField(max_length=128)
+    category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
     description = models.TextField(max_length=256)
-    available_count = models.IntegerField(default=0)
+    available_count = models.PositiveIntegerField(default=0)
     image = models.FileField(
         upload_to="img/parts",
-        default="img/parts/no_img_part.jpg"
+        default="img/static/no_img_part.jpg"
     )
 class Order(models.Model):
     order_id = models.BigAutoField(primary_key=True)
