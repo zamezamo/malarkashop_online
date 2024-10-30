@@ -26,6 +26,7 @@ class Part(models.Model):
         upload_to="img/parts",
         default="img/static/no_img_part.jpg"
     )
+    
 class Order(models.Model):
     order_id = models.BigAutoField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)

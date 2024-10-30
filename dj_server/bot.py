@@ -141,25 +141,28 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"\n\n"
     )
 
+    keyboard = [
+        [InlineKeyboardButton("↩️назад", callback_data=top_states["CHOOSE_CATEGORY"])]
+    ]
+
     if await sync_to_async(bool)(parts) == True:
         text += (
             f"В наличии:\n\n"
         )
+
+        keyboard.insert(
+            0,
+            [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT_SYM + data + SPLIT_SYM + "0")]
+        )
+
         async for part in parts:
             text += f" ●  *{part["name"]}*, {part["available_count"]}шт.\n"
+
     else:
         text += (
             f"Пока здесь пусто.."
         )
 
-    keyboard = [
-        [
-            InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT_SYM + data),
-        ],
-        [
-            InlineKeyboardButton("↩️назад", callback_data=top_states["CHOOSE_CATEGORY"])
-        ]
-    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_media(
@@ -184,9 +187,17 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
+    parts = models.Part.objects.filter(category=data)
+
     text = (
-        f"*PRODUCT CARD*\n"
+        f"*[{part["category"]}]*\n"
+        f"\n\n"
+        f"*{part["name"]}*\n"
+        f"_{part["description"]}_\n\n"
+        f"в наличии: *{part["available_count"]} шт.*"
     )
+
+    img = part["image"].url()
 
     keyboard = [
         [
@@ -209,7 +220,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{CONFIG.URL}/static/img/bot/logo.jpg",
+            media=img,
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
