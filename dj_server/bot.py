@@ -37,21 +37,20 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-SPLIT_SYM = "_"
+SPLIT = "_"
 
 top_states = {
     "CHOOSE_CATEGORY": 0,
     "CATEGORY_CARDS": 1,
     "PRODUCT_CARDS": 2,
 }
-
 product_card_states = {
-    "PREVIOUS": 20,
-    "NEXT": 21,
-    "ADD": 22,
-    "ENTER_COUNT": 23,
-    "REMOVE": 24,
-    "INTO_CART": 25,
+    "PREVIOUS": 1_0,
+    "NEXT": 1_1,
+    "ADD": 1_2,
+    "ENTER_COUNT": 1_3,
+    "REMOVE": 1_4,
+    "INTO_CART": 1_5,
 }
 
 @dataclass
@@ -109,7 +108,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     text = CONFIG.CHOOSE_CATEGORY_TEXT
     keyboard = [
-        [InlineKeyboardButton(button_name, callback_data=str(top_states["CATEGORY_CARDS"]) + SPLIT_SYM + button_item)] 
+        [InlineKeyboardButton(button_name, callback_data=str(top_states["CATEGORY_CARDS"]) + SPLIT + button_item)] 
             for button_item, button_name in CONFIG.CATEGORY_CHOICES.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -130,11 +129,11 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display all products in this category"""
     
     query = update.callback_query
-    data = query.data.split(SPLIT_SYM, 1)[1]
+    data = query.data.split(SPLIT, 1)[1]
 
     await query.answer()
 
-    parts = models.Part.objects.filter(category=data).values("name", "available_count")
+    parts = models.Part.objects.filter(category=data)
 
     text = (
         f"*[{CONFIG.CATEGORY_CHOICES[data]}]*\n"
@@ -150,13 +149,10 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"В наличии:\n\n"
         )
 
-        keyboard.insert(
-            0,
-            [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT_SYM + data + SPLIT_SYM + "0")]
-        )
+        keyboard.insert(0, [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT + data)])
 
         async for part in parts:
-            text += f" ●  *{part["name"]}*, {part["available_count"]}шт.\n"
+            text += f" ●  *{part.name}*, {part.available_count}шт.\n"
 
     else:
         text += (
@@ -183,21 +179,21 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #TODO: realize functional
 
     query = update.callback_query
-    data = query.data.split(SPLIT_SYM, 1)[1]
+    data = query.data.split(SPLIT, 1)[1]
 
     await query.answer()
 
-    parts = models.Part.objects.filter(category=data)
+    part = await models.Part.objects.all().afirst()
 
     text = (
-        f"*[{part["category"]}]*\n"
+        f"*[{part.category}]*\n"
         f"\n\n"
-        f"*{part["name"]}*\n"
-        f"_{part["description"]}_\n\n"
-        f"в наличии: *{part["available_count"]} шт.*"
+        f"*{part.name}*\n"
+        f"_{part.description}_\n\n"
+        f"в наличии: *{part.available_count} шт.*"
     )
 
-    img = part["image"].url()
+    img = part.image
 
     keyboard = [
         [
@@ -325,7 +321,6 @@ async def main() -> None:
         await ptb_application.start()
         await webserver.serve()
         await ptb_application.stop()
-        
 
 if __name__ == "__main__":
     asyncio.run(main())
