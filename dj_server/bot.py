@@ -58,7 +58,7 @@ product_card_states = {
     "REMOVE": 1_4,
 }
 admin_panel_states = {
-
+    #TODO admin panel conversation states
 }
 
 @dataclass
@@ -86,35 +86,29 @@ class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
         return super().from_update(update, application)
 
 
-async def create_order():
-    pass
-
-async def remove_order():
-    pass
-
-async def add_part_to_order():
-    pass
-
-async def remove_part_from_order():
-    pass
-
-
-async def start(update: Update, context: CustomContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display start message"""
 
-    user_id = update.effective_chat.id
+    query = update.callback_query
 
+    user_id = update.effective_chat.id
+    
     if await (models.Admin.objects.filter(admin_id=user_id)).aexists():
         return top_states["ADMIN_PANEL"]
-    
+
     user, _ = await models.User.objects.aget_or_create(user_id=user_id)
     order, _ = await models.Order.objects.aget_or_create(user_id=user)
 
-    text = CONFIG.START_TEXT
+    context.user_data["user_id"] = user.user_id
+    context.user_data["order_id"] = order.order_id
+
     keyboard = [
         [
             InlineKeyboardButton("🛍 перейти в каталог", callback_data=top_states["CHOOSE_CATEGORY"]),
         ],
+        [
+            InlineKeyboardButton("🛒 корзина", callback_data=top_states["INTO_CART"])
+        ]
         [
             InlineKeyboardButton("🕓 выполняемые заказы", callback_data=top_states["CONFIRMED_ORDER_LIST"])
         ],
@@ -123,17 +117,12 @@ async def start(update: Update, context: CustomContext):
         ]
     ]
 
-    if bool(order.parts):
-        text += CONFIG.START_TEXT_PARTS_IN_CART
-        keyboard.append(
-            [InlineKeyboardButton("🛒 корзина", callback_data=top_states["INTO_CART"])]
-        )
-
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    query = update.callback_query
-
     if bool(query):
+
+        text = CONFIG.START_TEXT_OVER
+
         await query.edit_message_media(
             media=InputMediaPhoto(
                 media=f"{CONFIG.URL}/static/img/bot/logo.jpg",
@@ -142,7 +131,11 @@ async def start(update: Update, context: CustomContext):
             ),
             reply_markup=reply_markup
         )
+
     else:
+
+        text = CONFIG.START_TEXT
+
         await update.message.reply_photo(
             photo=f"{CONFIG.URL}/static/img/bot/logo.jpg",
             caption=text,
@@ -172,8 +165,10 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display a message to the user to select a product category"""
 
     query = update.callback_query
+    await query.answer()
 
     text = CONFIG.CHOOSE_CATEGORY_TEXT
+
     keyboard = [
         [InlineKeyboardButton("↩️назад", callback_data=str(top_states["START"]))]
     ]
@@ -183,7 +178,6 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.answer()
     await query.edit_message_media(
         media=InputMediaPhoto(
             media=f"{CONFIG.URL}/static/img/bot/in_catalog.jpg",
@@ -200,6 +194,8 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display all products in this category"""
     
     query = update.callback_query
+    await query.answer()
+
     category = query.data.split(SPLIT)[1]
 
     parts = models.Part.objects.filter(category=category)
@@ -230,7 +226,6 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.answer()
     await query.edit_message_media(
         media=InputMediaPhoto(
             media=f"{CONFIG.URL}/static/img/categories/{category}.jpg",
@@ -249,7 +244,53 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #TODO: realize functional
 
     query = update.callback_query
-    callback, category = query.data.split(SPLIT, 1)
+    await query.answer()
+
+    callback, category = query.data.split(SPLIT)
+
+    order_id = context.user_data.get("order_id")
+
+    order = await models.Order.objects.aget(order_id=order_id)
+    parts = order.parts
+
+    if callback == str(top_states["PRODUCT_CARDS"]):
+        part = await models.Part.objects.filter(category=category).afirst()
+        part_id = part.part_id
+        context.user_data["part_id"] = part_id
+    else:
+        part_id = context.user_data.get("part_id")
+
+    if callback == str(product_card_states["PREVIOUS"]):
+        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__lt=part_id)).alast()
+        context.user_data["part_id"] = part.part_id
+
+    if callback == str(product_card_states["NEXT"]):
+        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__gt=part_id)).afirst()
+        context.user_data["part_id"] = part.part_id
+
+    if callback == str(product_card_states["REMOVE"]):
+        part = await models.Part.objects.aget(part_id=part_id)
+        if str(part_id) in parts:
+            if parts[str(part_id)] == 1:
+                parts.pop(str(part_id))
+            else:
+                parts[str(part_id)] -= 1
+        else:
+            #TODO check what is going here in tg chat
+            pass
+            
+    if callback == str(product_card_states["ADD"]):
+        part = await models.Part.objects.aget(part_id=part_id)
+        if str(part_id) in parts:
+            parts[str(part_id)] += 1
+        else:
+            parts[str(part_id)] = 1
+
+    if callback == str(product_card_states["ENTER_COUNT"]):
+        pass
+
+    if callback == str(top_states["INTO_CART"]):
+        pass
 
     text = (
         f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
@@ -259,38 +300,12 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"в наличии: *{part.available_count} шт.*"
     )
 
-    if callback == str(top_states["PRODUCT_CARDS"]):
-        part = await models.Part.objects.filter(category=category).afirst()
-
-    if callback == str(product_card_states["PREVIOUS"]):
-        category, part_id = category.split(SPLIT)
-        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__lt=part_id)).alast()
-
-    if callback == str(product_card_states["NEXT"]):
-        category, part_id = category.split(SPLIT)
-        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__gt=part_id)).afirst()
-
-    if callback == str(product_card_states["REMOVE"]):
-        pass
-
-    if callback == str(product_card_states["ADD"]):
-        pass
-
-    if callback == str(product_card_states["ENTER_COUNT"]):
-        pass
-
-    if callback == str(product_card_states["INTO_CART"]):
-        pass
-
-    # if callback == str("0"):
-    #     pass
-
     img = part.image
 
     keyboard = [
         [
-            InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"]) + SPLIT + category + SPLIT + str(part.part_id)),
-            InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"]) + SPLIT + category + SPLIT + str(part.part_id)),
+            InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"]) + SPLIT + category),
+            InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"]) + SPLIT + category),
         ],
         [
             InlineKeyboardButton("➕", callback_data=str(product_card_states["ADD"])),
@@ -306,7 +321,6 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.answer()
     await query.edit_message_media(
         media=InputMediaPhoto(
             media=img,
@@ -317,6 +331,11 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return top_states["PRODUCT_CARDS"]
+
+
+async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    #TODO realize
+    pass
 
 
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
@@ -394,15 +413,15 @@ ptb_application.add_handler(
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}_[0-9]{1,8}$"
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(product_card_states["NEXT"]) + "_[A-Z]{1,8}_[0-9]{1,8}$"
+                    pattern="^" + str(product_card_states["NEXT"]) + "_[A-Z]{1,8}$"
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(product_card_states["PREVIOUS"]) + "_[A-Z]{1,8}_[0-9]{1,8}$"
+                    pattern="^" + str(product_card_states["PREVIOUS"]) + "_[A-Z]{1,8}$"
                 ),
             ]
         },

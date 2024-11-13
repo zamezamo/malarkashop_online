@@ -15,6 +15,14 @@ START_TEXT = (
     f"\n"
 )
 
+START_TEXT_OVER = (
+    f"*{TITLE}*\n"
+    f"Подписывайтесь на наш [канал]({BOT_LINK})!\n"
+    f"\n"
+    f"описание\nописание\nописание\nописание\n"
+    f"\n"
+)
+
 START_TEXT_PARTS_IN_CART = (
     f"\n_в корзине присутствуют товары_"
 )
