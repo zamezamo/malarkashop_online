@@ -7,7 +7,6 @@ from dj_server.asgi import application
 
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.db.models import Q
-from asgiref.sync import sync_to_async
 
 from telegram.constants import ParseMode
 from telegram import (
@@ -104,11 +103,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("🛍 перейти в каталог", callback_data=top_states["CHOOSE_CATEGORY"]),
+            InlineKeyboardButton("🛍 перейти в каталог", callback_data=top_states["CHOOSE_CATEGORY"])
         ],
         [
             InlineKeyboardButton("🛒 корзина", callback_data=top_states["INTO_CART"])
-        ]
+        ],
         [
             InlineKeyboardButton("🕓 выполняемые заказы", callback_data=top_states["CONFIRMED_ORDER_LIST"])
         ],
@@ -170,11 +169,11 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = CONFIG.CHOOSE_CATEGORY_TEXT
 
     keyboard = [
-        [InlineKeyboardButton("↩️назад", callback_data=str(top_states["START"]))]
-    ]
-    keyboard += [
         [InlineKeyboardButton(button_name, callback_data=str(top_states["CATEGORY_CARDS"]) + SPLIT + category)] 
             for category, button_name in CONFIG.CATEGORY_CHOICES.items()
+    ]
+    keyboard += [
+        [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -206,10 +205,10 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = [
-        [InlineKeyboardButton("↩️назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))]
+        [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))]
     ]
 
-    if await sync_to_async(bool)(parts) == True:
+    if await parts.aexists():
         text += (
             f"В наличии:\n\n"
         )
@@ -262,11 +261,13 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if callback == str(product_card_states["PREVIOUS"]):
         part = await models.Part.objects.filter(Q(category=category) & Q(part_id__lt=part_id)).alast()
-        context.user_data["part_id"] = part.part_id
+        if part:
+            context.user_data["part_id"] = part.part_id
 
     if callback == str(product_card_states["NEXT"]):
         part = await models.Part.objects.filter(Q(category=category) & Q(part_id__gt=part_id)).afirst()
-        context.user_data["part_id"] = part.part_id
+        if part:
+            context.user_data["part_id"] = part.part_id
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
@@ -292,43 +293,44 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if callback == str(top_states["INTO_CART"]):
         pass
 
-    text = (
-        f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
-        f"\n\n"
-        f"*{part.name}*\n"
-        f"_{part.description}_\n\n"
-        f"в наличии: *{part.available_count} шт.*"
-    )
+    if part:
+        text = (
+            f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
+            f"\n"
+            f"*{part.name}*\n"
+            f"_{part.description}_\n\n"
+            f"в наличии: *{part.available_count} шт.*"
+        )
 
-    img = part.image
+        img = part.image
 
-    keyboard = [
-        [
-            InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"]) + SPLIT + category),
-            InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"]) + SPLIT + category),
-        ],
-        [
-            InlineKeyboardButton("➕", callback_data=str(product_card_states["ADD"])),
-            InlineKeyboardButton("ввести кол-во", callback_data=str(product_card_states["ENTER_COUNT"])),
-            InlineKeyboardButton("➖", callback_data=str(product_card_states["REMOVE"])),
-        ],
-        [
-            InlineKeyboardButton("🛒в корзину", callback_data=str(top_states["INTO_CART"]))
-        ],
-        [
-            InlineKeyboardButton("↩️назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))
+        keyboard = [
+            [
+                InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"]) + SPLIT + category),
+                InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"]) + SPLIT + category),
+            ],
+            [
+                InlineKeyboardButton("➕", callback_data=str(product_card_states["ADD"])),
+                InlineKeyboardButton("ввести кол-во", callback_data=str(product_card_states["ENTER_COUNT"])),
+                InlineKeyboardButton("➖", callback_data=str(product_card_states["REMOVE"])),
+            ],
+            [
+                InlineKeyboardButton("🛒 в корзину", callback_data=str(top_states["INTO_CART"]))
+            ],
+            [
+                InlineKeyboardButton("↩️ категории", callback_data=str(top_states["CHOOSE_CATEGORY"]))
+            ]
         ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_media(
-        media=InputMediaPhoto(
-            media=img,
-            caption=text,
-            parse_mode=ParseMode.MARKDOWN,
-        ),
-        reply_markup=reply_markup
-    )
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=img,
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
+            reply_markup=reply_markup
+        )
 
     return top_states["PRODUCT_CARDS"]
 
@@ -409,7 +411,7 @@ ptb_application.add_handler(
             top_states["PRODUCT_CARDS"]: [
                 CallbackQueryHandler(
                     choose_category, 
-                    pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
                 ),
                 CallbackQueryHandler(
                     product_cards,
