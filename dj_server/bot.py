@@ -19,10 +19,12 @@ from telegram.ext import (
     Application,
     CallbackContext,
     CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ConversationHandler,
     ContextTypes,
     ExtBot,
-    CallbackQueryHandler,
-    ConversationHandler
+    filters
 )
 
 import app_bot.models as models
@@ -53,8 +55,9 @@ product_card_states = {
     "PREVIOUS": 1_0,
     "NEXT": 1_1,
     "ADD": 1_2,
-    "ENTER_COUNT": 1_3,
-    "REMOVE": 1_4,
+    "REMOVE": 1_3,
+    "ENTER_COUNT": 1_4,
+    "GET_COUNT": 1_5,
 }
 admin_panel_states = {
     #TODO admin panel conversation states
@@ -196,6 +199,7 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     category = query.data.split(SPLIT)[1]
+    context.user_data["category_part"] = category
 
     parts = models.Part.objects.filter(category=category)
 
@@ -213,7 +217,7 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"В наличии:\n\n"
         )
 
-        keyboard.insert(0, [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT + category)])
+        keyboard.insert(0, [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]))])
 
         async for part in parts:
             text += f" ●  *{part.name}*, {part.available_count}шт.\n"
@@ -240,34 +244,41 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display all info about chosen product in this category"""
 
-    #TODO: realize functional
+    if update.callback_query is not None:
+        query = update.callback_query
+        await query.answer()
 
-    query = update.callback_query
-    await query.answer()
+        callback = query.data
+        entered_part_count = None
+    else:
+        entered_part_count = int(update.message.text)
 
-    callback, category = query.data.split(SPLIT)
+        callback = None
+
+    category = context.user_data.get("category_part")
 
     order_id = context.user_data.get("order_id")
-
     order = await models.Order.objects.aget(order_id=order_id)
     parts = order.parts
+
+    part_id = context.user_data.get("part_id")
 
     if callback == str(top_states["PRODUCT_CARDS"]):
         part = await models.Part.objects.filter(category=category).afirst()
         part_id = part.part_id
         context.user_data["part_id"] = part_id
-    else:
-        part_id = context.user_data.get("part_id")
 
     if callback == str(product_card_states["PREVIOUS"]):
         part = await models.Part.objects.filter(Q(category=category) & Q(part_id__lt=part_id)).alast()
-        if part:
-            context.user_data["part_id"] = part.part_id
-
+        if not part:
+            part = await models.Part.objects.filter(category=category).alast()
+        context.user_data["part_id"] = part.part_id
+        
     if callback == str(product_card_states["NEXT"]):
         part = await models.Part.objects.filter(Q(category=category) & Q(part_id__gt=part_id)).afirst()
-        if part:
-            context.user_data["part_id"] = part.part_id
+        if not part:
+            part = await models.Part.objects.filter(category=category).afirst()
+        context.user_data["part_id"] = part.part_id
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
@@ -276,9 +287,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parts.pop(str(part_id))
             else:
                 parts[str(part_id)] -= 1
-        else:
-            #TODO check what is going here in tg chat
-            pass
+        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
             
     if callback == str(product_card_states["ADD"]):
         part = await models.Part.objects.aget(part_id=part_id)
@@ -286,44 +295,70 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parts[str(part_id)] += 1
         else:
             parts[str(part_id)] = 1
+        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
 
-    if callback == str(product_card_states["ENTER_COUNT"]):
-        pass
+    if entered_part_count is not None:
+        await delete_last_msg_from_user(update, context)
+        part = await models.Part.objects.aget(part_id=part_id)
+        if entered_part_count > 0:
+            parts[str(part_id)] = entered_part_count
+        elif parts.get(str(part_id)) is not None:
+            parts.pop(str(part_id))
+        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
 
-    if callback == str(top_states["INTO_CART"]):
-        pass
+    text = (
+        f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
+        f"\n"
+        f"*{part.name}*\n"
+        f"_{part.description}_\n\n"
+        f"в наличии: *{part.available_count} шт.*\n"
+    )
 
-    if part:
-        text = (
-            f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
-            f"\n"
-            f"*{part.name}*\n"
-            f"_{part.description}_\n\n"
-            f"в наличии: *{part.available_count} шт.*"
+    if str(context.user_data.get("part_id")) in parts:
+        text += (
+            f"\nв корзине: *{parts[str(context.user_data.get("part_id"))]} шт.*"
         )
 
-        img = part.image
+    img = part.image
 
-        keyboard = [
-            [
-                InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"]) + SPLIT + category),
-                InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"]) + SPLIT + category),
-            ],
-            [
-                InlineKeyboardButton("➕", callback_data=str(product_card_states["ADD"])),
-                InlineKeyboardButton("ввести кол-во", callback_data=str(product_card_states["ENTER_COUNT"])),
-                InlineKeyboardButton("➖", callback_data=str(product_card_states["REMOVE"])),
-            ],
-            [
-                InlineKeyboardButton("🛒 в корзину", callback_data=str(top_states["INTO_CART"]))
-            ],
-            [
-                InlineKeyboardButton("↩️ категории", callback_data=str(top_states["CHOOSE_CATEGORY"]))
-            ]
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data=str(product_card_states["PREVIOUS"])),
+            InlineKeyboardButton("➡️", callback_data=str(product_card_states["NEXT"])),
+        ],
+        [
+            InlineKeyboardButton("➕", callback_data=str(product_card_states["ADD"])),
+            InlineKeyboardButton("ввести кол-во", callback_data=str(product_card_states["ENTER_COUNT"])),
+            InlineKeyboardButton("➖", callback_data=str(product_card_states["REMOVE"])),
+        ],
+        [
+            InlineKeyboardButton("🛒 в корзину", callback_data=str(top_states["INTO_CART"]))
+        ],
+        [
+            InlineKeyboardButton("↩️ категории", callback_data=str(top_states["CHOOSE_CATEGORY"]))
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    if callback == str(product_card_states["ADD"]) or callback == str(product_card_states["REMOVE"]):
+        await query.edit_message_caption(
+            caption=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    elif callback:
         await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=img,
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
+            reply_markup=reply_markup
+        )
+    else:
+        await ptb_application.bot.edit_message_media(
+            chat_id=update.effective_chat.id,
+            message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
                 media=img,
                 caption=text,
@@ -335,11 +370,42 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return top_states["PRODUCT_CARDS"]
 
 
+async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask user for enter part count in cart"""
+
+    query = update.callback_query
+    await query.answer()
+
+    text = CONFIG.ENTER_PARTS_COUNT
+    
+    await query.edit_message_caption(
+        caption=text
+    )
+
+    context.user_data["msg_id"] = query.message.message_id
+
+    return product_card_states["ENTER_COUNT"]
+
+
+async def delete_last_msg_from_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete last message from user"""
+
+    await update.message.delete()
+
+
 async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cart"""
+
     #TODO realize
-    pass
+    
+    order_id = context.user_data.get("order_id")
+    order = await models.Order.objects.aget(order_id=order_id)
 
+    text = (
+        f"[ 🛒 корзина ]"
+    )
 
+    
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
     """Handle custom updates."""
     chat_member = await context.bot.get_chat_member(chat_id=update.user_id, user_id=update.user_id)
@@ -387,6 +453,10 @@ ptb_application.add_handler(
                     choose_category, 
                     pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
                 ),
+                CallbackQueryHandler(
+                    into_cart,
+                    pattern="^" + str(top_states["INTO_CART"]) + "$"
+                )
             ],
             top_states["CHOOSE_CATEGORY"]: [
                 CallbackQueryHandler(
@@ -405,7 +475,7 @@ ptb_application.add_handler(
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "$"
                 ),
             ],
             top_states["PRODUCT_CARDS"]: [
@@ -415,16 +485,38 @@ ptb_application.add_handler(
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "$"
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(product_card_states["NEXT"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(product_card_states["NEXT"]) + "$"
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(product_card_states["PREVIOUS"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(product_card_states["PREVIOUS"]) + "$"
                 ),
+                CallbackQueryHandler(
+                    product_cards,
+                    pattern="^" + str(product_card_states["ADD"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    product_cards,
+                    pattern="^" + str(product_card_states["REMOVE"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    ask_for_enter_part_count_in_cart,
+                    pattern="^" + str(product_card_states["ENTER_COUNT"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    into_cart,
+                    pattern="^" + str(top_states["INTO_CART"]) + "$"
+                )
+            ],
+            # top_states["INTO_CART"]: [
+            # ]
+            product_card_states["ENTER_COUNT"]: [
+                MessageHandler(filters.Regex("^[0-9]{1,}$"), product_cards),
+                MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg_from_user)
             ]
         },
         fallbacks=[CommandHandler("start", start)],
