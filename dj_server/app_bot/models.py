@@ -15,6 +15,7 @@ class User(models.Model):
 
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
+    is_available = models.BooleanField(default=True)
     name = models.CharField(max_length=128)
     category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
     description = models.TextField(max_length=256)
@@ -32,7 +33,7 @@ class Order(models.Model):
     cost = models.FloatField(default=0.0)
 
 class ConfirmedOrder(models.Model):
-    order_id = models.BigIntegerField()
+    order_id = models.BigIntegerField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
@@ -42,7 +43,7 @@ class ConfirmedOrder(models.Model):
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
-    user_id = models.BigIntegerField()
+    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
     ordered_time = models.DateTimeField()
