@@ -264,47 +264,72 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     part_id = context.user_data.get("part_id")
 
     if callback == str(top_states["PRODUCT_CARDS"]):
-        part = await models.Part.objects.filter(category=category).afirst()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
         part_id = part.part_id
         context.user_data["part_id"] = part_id
 
     if callback == str(product_card_states["PREVIOUS"]):
-        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__lt=part_id)).alast()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__lt=part_id)).alast()
         if not part:
-            part = await models.Part.objects.filter(category=category).alast()
+            part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).alast()
         context.user_data["part_id"] = part.part_id
         
     if callback == str(product_card_states["NEXT"]):
-        part = await models.Part.objects.filter(Q(category=category) & Q(part_id__gt=part_id)).afirst()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__gt=part_id)).afirst()
         if not part:
-            part = await models.Part.objects.filter(category=category).afirst()
+            part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
         context.user_data["part_id"] = part.part_id
+
+    part_deleted_from_catalog = False
+    part_not_enough_available_count = False
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
-        if str(part_id) in parts:
-            if parts[str(part_id)] == 1:
+        if part.is_available == False:
+            part_deleted_from_catalog = True
+        elif str(part_id) in parts:
+            if parts[str(part_id)] - 1 > part.available_count:
+                parts[str(part_id)] = part.available_count
+                part_not_enough_available_count = True
+            if parts[str(part_id)] == 1 or parts[str(part_id)] == 0:
                 parts.pop(str(part_id))
             else:
                 parts[str(part_id)] -= 1
-        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
-            
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+
     if callback == str(product_card_states["ADD"]):
         part = await models.Part.objects.aget(part_id=part_id)
-        if str(part_id) in parts:
-            parts[str(part_id)] += 1
+        if part.is_available == False:
+            part_deleted_from_catalog = True
         else:
-            parts[str(part_id)] = 1
-        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+            if str(part_id) in parts:
+                if parts[str(part_id)] + 1 <= part.available_count:
+                    parts[str(part_id)] += 1
+                else:
+                    parts[str(part_id)] = part.available_count
+                    part_not_enough_available_count = True
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+            elif part.available_count > 0:
+                parts[str(part_id)] = 1
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+            else:
+                part_not_enough_available_count = True 
 
     if entered_part_count is not None:
         await delete_last_msg_from_user(update, context)
         part = await models.Part.objects.aget(part_id=part_id)
-        if entered_part_count > 0:
-            parts[str(part_id)] = entered_part_count
+        if part.is_available == False:
+            part_deleted_from_catalog = True
+        elif entered_part_count > 0:
+            if entered_part_count <= part.available_count:
+                parts[str(part_id)] = entered_part_count
+            else:
+                parts[str(part_id)] = part.available_count
+                part_not_enough_available_count = True
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
         elif parts.get(str(part_id)) is not None:
             parts.pop(str(part_id))
-        await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
 
     text = (
         f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
@@ -316,7 +341,20 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if str(context.user_data.get("part_id")) in parts:
         text += (
-            f"\nв корзине: *{parts[str(context.user_data.get("part_id"))]} шт.*"
+            f"\nв корзине: *{parts[str(context.user_data.get("part_id"))]} шт.*\n"
+        )
+
+    if part_deleted_from_catalog:
+        text += (
+            f"\n_произошла ошибка_\n"
+            f"вот так совпадение, товар только что был убран из каталога\n"
+            f"чтобы продолжить, выберите другой товар\n"
+        )
+
+    if part_not_enough_available_count:
+        text += (
+            f"\n_произошла ошибка_\n"
+            f"выставлено максимально доступное количество товара, либо товар убран из корзины\n"
         )
 
     img = part.image
@@ -341,11 +379,14 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if callback == str(product_card_states["ADD"]) or callback == str(product_card_states["REMOVE"]):
-        await query.edit_message_caption(
-            caption=text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        try:
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except:
+            pass
     elif callback:
         await query.edit_message_media(
             media=InputMediaPhoto(
