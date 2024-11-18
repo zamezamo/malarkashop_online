@@ -49,7 +49,7 @@ top_states = {
     "PRODUCT_CARDS": 4,
     "INTO_CART": 5,
     "CONFIRMED_ORDER_LIST": 6,
-    "COMPLETED_ORDER_LIST": 7
+    "COMPLETED_ORDER_LIST": 7,
 }
 product_card_states = {
     "PREVIOUS": 1_0,
@@ -57,7 +57,11 @@ product_card_states = {
     "ADD": 1_2,
     "REMOVE": 1_3,
     "ENTER_COUNT": 1_4,
-    "GET_COUNT": 1_5,
+    "GET_PART_BY_ID": 1_5
+}
+into_cart_states = {
+    "MAKE_ORDER": 2_0,
+    "CONFIRM_ORDER": 2_1
 }
 admin_panel_states = {
     #TODO admin panel conversation states
@@ -201,7 +205,7 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category = query.data.split(SPLIT)[1]
     context.user_data["category_part"] = category
 
-    parts = models.Part.objects.filter(category=category)
+    parts = models.Part.objects.filter(Q(is_available=True) & Q(category=category))
 
     text = (
         f"*[{CONFIG.CATEGORY_CHOICES[category]}]*\n"
@@ -220,7 +224,7 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.insert(0, [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]))])
 
         async for part in parts:
-            text += f" ●  *{part.name}*, {part.available_count}шт.\n"
+            text += f"●  *{part.name}*, {part.available_count}шт.\n"
 
     else:
         text += (
@@ -420,12 +424,13 @@ async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes
     text = CONFIG.ENTER_PARTS_COUNT
     
     await query.edit_message_caption(
-        caption=text
+        caption=text,
+        parse_mode=ParseMode.MARKDOWN
     )
 
     context.user_data["msg_id"] = query.message.message_id
 
-    return product_card_states["ENTER_COUNT"]
+    return product_card_states["GET_PART_BY_ID"]
 
 
 async def delete_last_msg_from_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -438,13 +443,76 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cart"""
 
     #TODO realize
+
+    query = update.callback_query
+    callback = query.data
+    await query.answer()
     
     order_id = context.user_data.get("order_id")
     order = await models.Order.objects.aget(order_id=order_id)
+    order_parts = order.parts
 
     text = (
-        f"[ 🛒 корзина ]"
+        f"*[ 🛒 корзина ]*\n\n\n"
     )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
+        ]
+    ]
+
+    if bool(order_parts):
+        text += (
+            f"_ваши товары в корзине:_\n\n"
+        )
+
+        parts = models.Part.objects.filter(part_id__in=list(map(int, order_parts.keys())))
+
+        async for part in parts:
+            text += (
+                f"●  *{part.name}*, {order_parts[str(part.part_id)]} шт.\n"
+            )
+
+        if callback == str(into_cart_states["MAKE_ORDER"]):
+            keyboard.insert(
+                0,
+                [InlineKeyboardButton("✅ да", callback_data=str(into_cart_states["MAKE_ORDER"]))]
+            )
+            text += (
+                f"\n*подтверждение заказа*. вы уверены?"
+            )
+        else:
+            keyboard.insert(
+                0,
+                [InlineKeyboardButton("📦 оформить заказ", callback_data=str(into_cart_states["MAKE_ORDER"]))]
+            )
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+    else:
+        text += (
+            f"в корзине пусто"
+        )
+
+    if callback == str(top_states["INTO_CART"]):
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_media(
+                media=InputMediaPhoto(
+                    media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
+                    caption=text,
+                    parse_mode=ParseMode.MARKDOWN,
+                ),
+                reply_markup=reply_markup
+            )
+        
+    return top_states["INTO_CART"]
 
     
 async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
@@ -553,12 +621,23 @@ ptb_application.add_handler(
                     pattern="^" + str(top_states["INTO_CART"]) + "$"
                 )
             ],
-            # top_states["INTO_CART"]: [
-            # ]
-            product_card_states["ENTER_COUNT"]: [
+            top_states["INTO_CART"]: [
+                CallbackQueryHandler(
+                    start,
+                    pattern="^" + str(top_states["START"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    into_cart,
+                    pattern="^" + str(into_cart_states["MAKE_ORDER"]) + "$"
+                )
+            ],
+            product_card_states["GET_PART_BY_ID"]: [
                 MessageHandler(filters.Regex("^[0-9]{1,}$"), product_cards),
-                MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg_from_user)
+                MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg_from_user),
             ]
+            # into_cart_states["MAKE_ORDER"]: [
+
+            # ]
         },
         fallbacks=[CommandHandler("start", start)],
         per_message=False,
