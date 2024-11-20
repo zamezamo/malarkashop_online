@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 from dataclasses import dataclass
 
 import uvicorn
@@ -51,6 +52,7 @@ top_states = {
     "CONFIRMED_ORDER_LIST": 6,
     "COMPLETED_ORDER_LIST": 7,
 }
+
 product_card_states = {
     "PREVIOUS": 1_0,
     "NEXT": 1_1,
@@ -59,13 +61,16 @@ product_card_states = {
     "ENTER_COUNT": 1_4,
     "GET_PART_BY_ID": 1_5
 }
+
 into_cart_states = {
     "MAKE_ORDER": 2_0,
     "CONFIRM_ORDER": 2_1
 }
+
 admin_panel_states = {
     #TODO admin panel conversation states
 }
+
 
 @dataclass
 class WebhookUpdate:
@@ -126,8 +131,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if bool(query):
-
-        text = CONFIG.START_TEXT_OVER
+        text = CONFIG.START_OVER_TEXT
 
         await query.edit_message_media(
             media=InputMediaPhoto(
@@ -139,7 +143,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     else:
-
         text = CONFIG.START_TEXT
 
         await update.message.reply_photo(
@@ -213,7 +216,9 @@ async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = [
-        [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))]
+        [
+            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))
+        ]
     ]
 
     if await parts.aexists():
@@ -263,59 +268,81 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     order_id = context.user_data.get("order_id")
     order = await models.Order.objects.aget(order_id=order_id)
-    parts = order.parts
 
     part_id = context.user_data.get("part_id")
+
+    part_deleted_from_catalog = False
+    part_not_enough_available_count = False
 
     if callback == str(top_states["PRODUCT_CARDS"]):
         part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
         part_id = part.part_id
+        
         context.user_data["part_id"] = part_id
+
+        if str(part_id) in order.parts:
+            if order.parts[str(part_id)] > part.available_count:
+                order.parts[str(part_id)] = part.available_count
+                part_not_enough_available_count = True
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     if callback == str(product_card_states["PREVIOUS"]):
         part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__lt=part_id)).alast()
+
         if not part:
             part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).alast()
+
         context.user_data["part_id"] = part.part_id
+
+        if str(part.part_id) in order.parts:
+            if order.parts[str(part.part_id)] > part.available_count:
+                order.parts[str(part.part_id)] = part.available_count
+                part_not_enough_available_count = True
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         
     if callback == str(product_card_states["NEXT"]):
         part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__gt=part_id)).afirst()
+
         if not part:
             part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
+
         context.user_data["part_id"] = part.part_id
 
-    part_deleted_from_catalog = False
-    part_not_enough_available_count = False
+        if str(part.part_id) in order.parts:
+            if order.parts[str(part.part_id)] > part.available_count:
+                order.parts[str(part.part_id)] = part.available_count
+                part_not_enough_available_count = True
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
         if part.is_available == False:
             part_deleted_from_catalog = True
-        elif str(part_id) in parts:
-            if parts[str(part_id)] - 1 > part.available_count:
-                parts[str(part_id)] = part.available_count
+        elif str(part_id) in order.parts:
+            if order.parts[str(part_id)] - 1 > part.available_count:
+                order.parts[str(part_id)] = part.available_count
                 part_not_enough_available_count = True
-            if parts[str(part_id)] == 1 or parts[str(part_id)] == 0:
-                parts.pop(str(part_id))
+            elif order.parts[str(part_id)] > 1:
+                order.parts[str(part_id)] -= 1
             else:
-                parts[str(part_id)] -= 1
-            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+                order.parts.pop(str(part_id))
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     if callback == str(product_card_states["ADD"]):
         part = await models.Part.objects.aget(part_id=part_id)
         if part.is_available == False:
             part_deleted_from_catalog = True
         else:
-            if str(part_id) in parts:
-                if parts[str(part_id)] + 1 <= part.available_count:
-                    parts[str(part_id)] += 1
+            if str(part_id) in order.parts:
+                if order.parts[str(part_id)] + 1 <= part.available_count:
+                    order.parts[str(part_id)] += 1
                 else:
-                    parts[str(part_id)] = part.available_count
+                    order.parts[str(part_id)] = part.available_count
                     part_not_enough_available_count = True
-                await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
             elif part.available_count > 0:
-                parts[str(part_id)] = 1
-                await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+                order.parts[str(part_id)] = 1
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
             else:
                 part_not_enough_available_count = True 
 
@@ -326,40 +353,36 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             part_deleted_from_catalog = True
         elif entered_part_count > 0:
             if entered_part_count <= part.available_count:
-                parts[str(part_id)] = entered_part_count
+                order.parts[str(part_id)] = entered_part_count
             else:
-                parts[str(part_id)] = part.available_count
+                order.parts[str(part_id)] = part.available_count
                 part_not_enough_available_count = True
-            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
-        elif parts.get(str(part_id)) is not None:
-            parts.pop(str(part_id))
-            await models.Order.objects.filter(order_id=order_id).aupdate(parts=parts)
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
+        elif order.parts.get(str(part_id)) is not None:
+            order.parts.pop(str(part_id))
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     text = (
         f"*[{CONFIG.CATEGORY_CHOICES[part.category]}]*\n"
         f"\n"
         f"*{part.name}*\n"
         f"_{part.description}_\n\n"
+        f"цена за 1шт.: *{part.price}р.*\n"
         f"в наличии: *{part.available_count} шт.*\n"
     )
 
-    if str(context.user_data.get("part_id")) in parts:
+    if str(part.part_id) in order.parts:
+        count = order.parts[str(part.part_id)]
         text += (
-            f"\nв корзине: *{parts[str(context.user_data.get("part_id"))]} шт.*\n"
+            f"\nв корзине: *{count}шт.*\n"
+            f"на *{count * part.price}р.*\n"
         )
 
     if part_deleted_from_catalog:
-        text += (
-            f"\n_произошла ошибка_\n"
-            f"вот так совпадение, товар только что был убран из каталога\n"
-            f"чтобы продолжить, выберите другой товар\n"
-        )
+        text += CONFIG.PART_DELETED_FROM_CATALOG_ERROR_TEXT
 
     if part_not_enough_available_count:
-        text += (
-            f"\n_произошла ошибка_\n"
-            f"выставлено максимально доступное количество товара, либо товар убран из корзины\n"
-        )
+        text += CONFIG.PART_NOT_ENOUGH_AVAILABLE_COUNT_ERROR_TEXT
 
     img = part.image
 
@@ -421,7 +444,7 @@ async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.ENTER_PARTS_COUNT
+    text = CONFIG.ENTER_PARTS_COUNT_TEXT
     
     await query.edit_message_caption(
         caption=text,
@@ -439,10 +462,28 @@ async def delete_last_msg_from_user(update: Update, context: ContextTypes.DEFAUL
     await update.message.delete()
 
 
-async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cart"""
+async def confirm_order_to_db(order: models.Order):
+    """Add order to confirmed orders in db and change the quantity of ordered parts in catalog"""
 
     #TODO realize
+
+    await models.ConfirmedOrder.objects.acreate(
+        order_id = order.order_id,
+        user_id = order.user_id,
+        cost = order.cost,
+        ordered_time = datetime.now()
+    )
+
+    parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
+
+    async for part in parts:
+        count = part.available_count - order.parts[str(part.part_id)]
+        await models.Part.objects.filter(part_id=part.part_id).aupdate(available_count=count)
+
+    await models.Order.objects.filter(order_id=order.order_id).adelete()
+
+async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cart"""
 
     query = update.callback_query
     callback = query.data
@@ -450,67 +491,154 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     order_id = context.user_data.get("order_id")
     order = await models.Order.objects.aget(order_id=order_id)
-    order_parts = order.parts
+    order.cost = 0
 
-    text = (
-        f"*[ 🛒 корзина ]*\n\n\n"
-    )
+    text = CONFIG.INTO_CART_TEXT
+    reply_markup = None
 
-    keyboard = [
-        [
-            InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
-        ]
-    ]
+    if bool(order.parts):
+        text += CONFIG.PARTS_PRESENTED_IN_CART_TEXT
 
-    if bool(order_parts):
-        text += (
-            f"_ваши товары в корзине:_\n\n"
-        )
+        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
-        parts = models.Part.objects.filter(part_id__in=list(map(int, order_parts.keys())))
+        if callback == str(top_states["INTO_CART"]):
+            async for part in parts:
+                count = order.parts[str(part.part_id)]
+                price = part.price
+                cost = count * price
+                text += (
+                    f"●  *{part.name}*\n"
+                    f"{count}шт. x {price}р. = _{cost}р._\n"
+                )
+                order.cost += cost
 
-        async for part in parts:
             text += (
-                f"●  *{part.name}*, {order_parts[str(part.part_id)]} шт.\n"
+                f"\n*итого:* _{order.cost}р._\n"
             )
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("📦 оформить заказ", callback_data=str(into_cart_states["MAKE_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
         if callback == str(into_cart_states["MAKE_ORDER"]):
-            keyboard.insert(
-                0,
-                [InlineKeyboardButton("✅ да", callback_data=str(into_cart_states["MAKE_ORDER"]))]
-            )
+            async for part in parts:
+                count = order.parts[str(part.part_id)]
+                price = part.price
+                cost = count * price
+                text += (
+                    f"●  *{part.name}*\n"
+                    f"{count}шт. x {price}р. = _{cost}р._\n"
+                )
+
+                order.cost += cost
+
             text += (
-                f"\n*подтверждение заказа*. вы уверены?"
-            )
-        else:
-            keyboard.insert(
-                0,
-                [InlineKeyboardButton("📦 оформить заказ", callback_data=str(into_cart_states["MAKE_ORDER"]))]
+                f"\n*итого:* _{order.cost}р._\n"
             )
 
+            text += CONFIG.ORDER_CONFIRMATION_TEXT
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ да", callback_data=str(into_cart_states["CONFIRM_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+        if callback == str(into_cart_states["CONFIRM_ORDER"]):
+
+            parts_id_deleted_from_catalog = list()
+            parts_id_not_enough_available_count = list()
+
+            async for part in parts:
+                part_id = part.part_id
+
+                if part.is_available == False:
+                    text += (
+                        f"●  *{part.name}*\n"
+                        f"{order.parts[str(part_id)]}шт.\n"
+                        f"_[удалено из каталога]_,\n"
+                    )
+
+                    parts_id_deleted_from_catalog.append(part_id)
+                    order.parts.pop(str(part_id))
+                else:
+                    count = order.parts[str(part_id)]
+                    price = part.price
+                    cost = count * price
+
+                    if order.parts[str(part_id)] > part.available_count:
+                        text += (
+                            f"●  *{part.name}*\n"
+                            f"{count}шт. x {price}р. = _{cost}р._\n"
+                            f"_[выст. макс. дост. кол-во]_,\n"
+                        )
+
+                        order.parts[str(part_id)] = part.available_count
+                        parts_id_not_enough_available_count.append(part_id)
+                    else:
+                        text += (
+                            f"●  *{part.name}*\n"
+                            f"{count}шт. x {price}р. = _{cost}р._\n"
+                        )
+                        order.cost += cost
+
+            text += (
+                f"\n*итого:* _{order.cost}р._\n"
+            )
+
+            if len(parts_id_deleted_from_catalog) or len(parts_id_not_enough_available_count):   
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("✅ ок", callback_data=str(into_cart_states["MAKE_ORDER"]))
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                text += CONFIG.ORDER_CONFIRMATION_ERROR_TEXT
+            else:
+                print(f"ORDER #{order.order_id} CONFIRMED")
+                # context.user_data.clear()
+                # await confirm_order_to_db(order=order)
+
+    else:
+        text += CONFIG.EMPTY_CART_TEXT
+        keyboard = [   
+            [
+                InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
+            ]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_caption(
-                caption=text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
-            )
-    else:
-        text += (
-            f"в корзине пусто"
+    await query.edit_message_caption(
+            caption=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
         )
 
     if callback == str(top_states["INTO_CART"]):
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_media(
-                media=InputMediaPhoto(
-                    media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
-                    caption=text,
-                    parse_mode=ParseMode.MARKDOWN,
-                ),
-                reply_markup=reply_markup
-            )
+        try:
+            await query.edit_message_media(
+                    media=InputMediaPhoto(
+                        media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
+                        caption=text,
+                        parse_mode=ParseMode.MARKDOWN,
+                    ),
+                    reply_markup=reply_markup
+                )
+        except:
+            pass
         
     return top_states["INTO_CART"]
 
@@ -629,15 +757,16 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     into_cart,
                     pattern="^" + str(into_cart_states["MAKE_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    into_cart,
+                    pattern="^" + str(into_cart_states["CONFIRM_ORDER"]) + "$"
                 )
             ],
             product_card_states["GET_PART_BY_ID"]: [
                 MessageHandler(filters.Regex("^[0-9]{1,}$"), product_cards),
                 MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg_from_user),
-            ]
-            # into_cart_states["MAKE_ORDER"]: [
-
-            # ]
+            ],
         },
         fallbacks=[CommandHandler("start", start)],
         per_message=False,
