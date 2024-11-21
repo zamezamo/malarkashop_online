@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 
 from django.db import models
 
@@ -12,6 +12,7 @@ class Admin(models.Model):
 
 class User(models.Model):
     user_id = models.BigIntegerField()
+    username = models.CharField(max_length=64, default="")
 
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
@@ -37,15 +38,15 @@ class ConfirmedOrder(models.Model):
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField(default=datetime.fromtimestamp(0))
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
     is_accepted = models.BooleanField(default=False)
-    accepted_time = models.DateTimeField(default=datetime.fromtimestamp(0))
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField(default=datetime.fromtimestamp(0))
-    accepted_time = models.DateTimeField(default=datetime.fromtimestamp(0))
-    completed_time = models.DateTimeField(default=datetime.fromtimestamp(0))
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    completed_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))

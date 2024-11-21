@@ -1,3 +1,7 @@
+from datetime import timedelta
+
+TZ_OFFSET = timedelta(hours=3)
+
 TITLE = 'AutoCustomersStore'
 BOT_LINK="tg://resolve?domain=autocosmeticsstore_bot"
 

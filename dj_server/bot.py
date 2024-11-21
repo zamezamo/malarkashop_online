@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 import uvicorn
@@ -119,14 +119,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
     user_id = update.effective_chat.id
+    username = update.effective_chat.username
+    if not username:
+        username = str(user_id)
 
     context.user_data.clear()
     
     if await (models.Admin.objects.filter(admin_id=user_id)).aexists():
         return top_states["ADMIN_PANEL"]
 
-    user, _ = await models.User.objects.aget_or_create(user_id=user_id)
+    user, _ = await models.User.objects.aupdate_or_create(user_id=user_id, username=username)
     order, _ = await models.Order.objects.aget_or_create(user_id=user)
+
+    if user.username != username:
+        await models.User.objects.filter(user_id=user_id).aupdate(username=username)
 
     context.user_data["user_id"] = user.user_id
     context.user_data["order_id"] = order.order_id
@@ -176,8 +182,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    #TODO realize
-    pass
+    "Admin panel"
+
+    return top_states["ADMIN_PANEL"]
 
 
 async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -219,9 +226,11 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if order:
         parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
+        ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
+
         text += (
             f"- заказ *№{order.order_id}* -\n\n"
-            f"оформлен: _{order.ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
         )
 
         if order.is_accepted:
@@ -320,11 +329,15 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if order:
         parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
+        ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
+        accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
+        completed_time = order.completed_time + CONFIG.TZ_OFFSET
+
         text += (
             f"- заказ *№{order.order_id}* -\n\n"
-            f"оформлен: _{order.ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
-            f"принят: _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n"
-            f"завершён: _{order.completed_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"принят: _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"завершён: _{completed_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
         )
 
         async for part in parts:
@@ -688,7 +701,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
         user_id = user,
         parts = order.parts,
         cost = order.cost,
-        ordered_time = datetime.now()
+        ordered_time = datetime.now(timezone.utc)
     )
 
     parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
