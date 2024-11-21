@@ -16,9 +16,9 @@ class User(models.Model):
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
     is_available = models.BooleanField(default=True)
-    name = models.CharField(max_length=128)
+    name = models.CharField(max_length=128, default="")
     category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
-    description = models.TextField(max_length=256)
+    description = models.TextField(max_length=256, default="")
     price = models.FloatField(default=0.0)
     available_count = models.PositiveIntegerField(default=0)
     image = models.FileField(
@@ -37,15 +37,15 @@ class ConfirmedOrder(models.Model):
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField()
+    ordered_time = models.DateTimeField(default=datetime.fromtimestamp(0))
     is_accepted = models.BooleanField(default=False)
-    accepted_time = models.DateTimeField()
+    accepted_time = models.DateTimeField(default=datetime.fromtimestamp(0))
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
     user_id = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField()
-    accepted_time = models.DateTimeField()
-    completed_time = models.DateTimeField()
+    ordered_time = models.DateTimeField(default=datetime.fromtimestamp(0))
+    accepted_time = models.DateTimeField(default=datetime.fromtimestamp(0))
+    completed_time = models.DateTimeField(default=datetime.fromtimestamp(0))
