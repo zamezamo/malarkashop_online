@@ -197,7 +197,8 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         order = await models.ConfirmedOrder.objects.filter(user_id=user).afirst()
-        order_id = order.order_id
+        if order:
+            order_id = order.order_id
 
         context.user_data["confirmed_order_id"] = order_id
 
@@ -250,7 +251,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
     else:
-        text += CONFIG.CONFIRMED_ORDERS_EMPTY_TEXT
+        text += CONFIG.ORDERS_EMPTY_TEXT
 
         keyboard = [
             [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
@@ -282,7 +283,100 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List of user's completed orders"""
+
+    query = update.callback_query
+    callback = query.data
+    await query.answer()
+
+    order = None
+    order_id = context.user_data.get("completed_order_id")
     
+    user_id = context.user_data.get("user_id")
+    user = await models.User.objects.aget(user_id=user_id)
+
+    text = CONFIG.COMPLETED_ORDERS_TEXT
+
+    if callback == str(top_states["COMPLETED_ORDER_LIST"]):
+        order = await models.CompletedOrder.objects.filter(user_id=user).afirst()
+        if order:
+            order_id = order.order_id
+
+        context.user_data["completed_order_id"] = order_id
+
+    if callback == str(completed_order_states["PREVIOUS"]):
+        order = await models.CompletedOrder.objects.filter(Q(user_id=user) & Q(order_id__lt=order_id)).alast()
+        if not order:
+            order = await models.CompletedOrder.objects.filter(user_id=user).alast()
+        if order:
+            context.user_data["completed_order_id"] = order.order_id
+
+    if callback == str(completed_order_states["NEXT"]):
+        order = await models.CompletedOrder.objects.filter(Q(user_id=user) & Q(order_id__gt=order_id)).afirst()
+        if not order:
+            order = await models.CompletedOrder.objects.filter(user_id=user).afirst()
+        if order:
+            context.user_data["completed_order_id"] = order.order_id
+
+    if order:
+        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
+
+        text += (
+            f"- заказ *№{order.order_id}* -\n\n"
+            f"оформлен: _{order.ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"принят: _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"завершён: _{order.completed_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+        )
+
+        async for part in parts:
+            count = order.parts[str(part.part_id)]
+            price = part.price
+            cost = count * price
+
+            text += (
+                f"●  *{part.name}*\n"
+                f"{count}шт. x {price}р. = _{cost}р._\n"
+            )
+
+        text += f"\nстоимость: _{order.cost}р._"
+
+        keyboard = [
+            [
+                InlineKeyboardButton("⬅️", callback_data=str(completed_order_states["PREVIOUS"])),
+                InlineKeyboardButton("➡️", callback_data=str(completed_order_states["NEXT"])),
+            ],
+            [
+                InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))
+            ]
+        ]
+    else:
+        text += CONFIG.ORDERS_EMPTY_TEXT
+
+        keyboard = [
+            [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
+        ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if callback == str(top_states["COMPLETED_ORDER_LIST"]):
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=f"{CONFIG.URL}/static/img/bot/completed_orders.jpg",
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
+            reply_markup=reply_markup
+        )
+    else:
+        try: # ingnore telegram.error.BadRequest: Message on the same message
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+
+    return top_states["COMPLETED_ORDER_LIST"]
 
 
 async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -602,6 +696,8 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
     async for part in parts:
         count = part.available_count - order.parts[str(part.part_id)]
         await models.Part.objects.filter(part_id=part.part_id).aupdate(available_count=count)
+        if count == 0:
+            await models.Part.objects.filter(part_id=part.part_id).aupdate(is_available=False)
 
     await models.Order.objects.filter(order_id=order.order_id).adelete()
 
@@ -797,21 +893,21 @@ async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
     await context.bot.send_message(chat_id=CONFIG.ADMIN_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
 
 
-async def custom_updates(request: HttpRequest) -> HttpResponse:
-    """Handle incoming webhook updates"""
+# async def custom_updates(request: HttpRequest) -> HttpResponse:
+#     """Handle incoming webhook updates"""
 
-    try:
-        user_id = int(request.GET["user_id"])
-        payload = request.GET["payload"]
-    except KeyError:
-        return HttpResponseBadRequest(
-            "Please pass both `user_id` and `payload` as query parameters.",
-        )
-    except ValueError:
-        return HttpResponseBadRequest("The `user_id` must be a string!")
+#     try:
+#         user_id = int(request.GET["user_id"])
+#         payload = request.GET["payload"]
+#     except KeyError:
+#         return HttpResponseBadRequest(
+#             "Please pass both `user_id` and `payload` as query parameters.",
+#         )
+#     except ValueError:
+#         return HttpResponseBadRequest("The `user_id` must be a string!")
 
-    await ptb_application.update_queue.put(WebhookUpdate(user_id=user_id, payload=payload))
-    return HttpResponse()
+#     await ptb_application.update_queue.put(WebhookUpdate(user_id=user_id, payload=payload))
+#     return HttpResponse()
 
 
 # Set up PTB application and a web application for handling the incoming requests.
@@ -838,6 +934,10 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     confirmed_order_list, 
                     pattern="^" + str(top_states["CONFIRMED_ORDER_LIST"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    completed_order_list, 
+                    pattern="^" + str(top_states["COMPLETED_ORDER_LIST"]) + "$"
                 )
             ],
             top_states["CONFIRMED_ORDER_LIST"]: [
@@ -852,7 +952,21 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     confirmed_order_list, 
                     pattern="^" + str(confirmed_order_states["NEXT"]) + "$"
+                )
+            ],
+            top_states["COMPLETED_ORDER_LIST"]: [
+                CallbackQueryHandler(
+                    start, 
+                    pattern="^" + str(top_states["START"]) + "$"
                 ),
+                CallbackQueryHandler(
+                    completed_order_list, 
+                    pattern="^" + str(completed_order_states["PREVIOUS"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    completed_order_list, 
+                    pattern="^" + str(completed_order_states["NEXT"]) + "$"
+                )
             ],
             top_states["CHOOSE_CATEGORY"]: [
                 CallbackQueryHandler(
