@@ -6,7 +6,7 @@ TITLE = 'AutoCustomersStore'
 BOT_LINK="tg://resolve?domain=autocosmeticsstore_bot"
 
 # Define bot configuration constants
-URL = "https://510e-178-127-136-73.ngrok-free.app"
+URL = "https://ef6f-178-124-178-90.ngrok-free.app"
 ADMIN_CHAT_ID = 542399495 # @zamezamo
 PORT = 8000
 TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # KEEP IT IN SECRET!
@@ -27,12 +27,22 @@ START_OVER_TEXT = (
     f"\n"
 )
 
+ADMIN_PANEL_TEXT = (
+    f"*{TITLE}*\n"
+    f"*[admin панель]*\n"
+    f"_успешно авторизовано_\n\n\n"
+)
+
 PARTS_IN_CART_START_TEXT = (
     f"\n_в корзине присутствуют товары_"
 )
 
 CHOOSE_CATEGORY_TEXT = (
     f"\n_выберите категорию товара ниже:_"
+)
+
+EMPTY_TEXT = (
+    f"здесь пусто.."
 )
 
 ENTER_PARTS_COUNT_TEXT = (
@@ -59,10 +69,6 @@ PARTS_PRESENTED_IN_CART_TEXT = (
     f"_ваши товары в корзине:_\n\n"
 )
 
-EMPTY_CART_TEXT = (
-    f"в корзине пусто"
-)
-
 ORDER_CONFIRMATION_TEXT = (
     f"\n❔ *подтверждение заказа*. _вы уверены_?"
 )
@@ -78,10 +84,6 @@ CONFIRMED_ORDERS_TEXT = (
 
 COMPLETED_ORDERS_TEXT = (
     f"*[✅ архив заказов]*\n\n\n"
-)
-
-ORDERS_EMPTY_TEXT = (
-    f"здесь пусто.."
 )
 
 CATEGORY_CHOICES = {

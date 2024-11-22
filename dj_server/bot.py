@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import uvicorn
 from dj_server.asgi import application
 
-from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.db.models import Q
 
 from telegram.constants import ParseMode
@@ -24,7 +23,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
-    ExtBot,
     filters
 )
 
@@ -46,7 +44,7 @@ top_states = {
     "START": 0,
     "ADMIN_PANEL": 1,
     "CHOOSE_CATEGORY": 2,
-    "CATEGORY_CARDS": 3,
+    "EMPTY_CATEGORY": 3,
     "PRODUCT_CARDS": 4,
     "INTO_CART": 5,
     "CONFIRMED_ORDER_LIST": 6,
@@ -55,7 +53,9 @@ top_states = {
 }
 
 admin_panel_states = {
-    #TODO admin panel conversation states
+    "NOTIFICATIONS_ON_OFF": 2_0,
+    "ALL_CONFIRMED_ORDER_LIST": 2_1,
+    "ALL_COMPLETED_ORDER_LIST": 2_2
 }
 
 confirmed_order_states = {
@@ -82,30 +82,6 @@ into_cart_states = {
     "CONFIRM_ORDER": 6_1
 }
 
-@dataclass
-class WebhookUpdate:
-    """Simple dataclass to wrap a custom update type"""
-
-    user_id: int
-    payload: str
-
-
-class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
-    """
-    Custom CallbackContext class that makes `user_data` available for updates of type
-    `WebhookUpdate`.
-    """
-
-    @classmethod
-    def from_update(
-        cls,
-        update: object,
-        application: "Application",
-    ) -> "CustomContext":
-        if isinstance(update, WebhookUpdate):
-            return cls(application=application, user_id=update.user_id)
-        return super().from_update(update, application)
-
 
 async def delete_last_msg(update: Update, context=None):
     """Delete last message from user"""
@@ -126,6 +102,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     
     if await (models.Admin.objects.filter(admin_id=user_id)).aexists():
+        await admin_panel(update, context)
         return top_states["ADMIN_PANEL"]
 
     user, _ = await models.User.objects.aupdate_or_create(user_id=user_id, username=username)
@@ -184,7 +161,122 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     "Admin panel"
 
+    callback = None
+
+    if update.callback_query is not None:
+        query = update.callback_query
+        await query.answer()
+
+        callback = query.data
+    else:
+        await delete_last_msg(update)
+
+    text = CONFIG.ADMIN_PANEL_TEXT
+
+    admin = await models.Admin.objects.aget(admin_id=update.effective_chat.id)
+
+    if callback == str(admin_panel_states["NOTIFICATIONS_ON_OFF"]):
+        admin.is_notification_enabled = not admin.is_notification_enabled
+        await models.Admin.objects.filter(admin_id=admin.admin_id).aupdate(is_notification_enabled=admin.is_notification_enabled)
+
+    text += f"*[статистика на сегодня]*\n\n"
+
+    confirmed_orders_count = await models.ConfirmedOrder.objects.filter(is_accepted=False).acount()
+    accepted_orders_count = await models.ConfirmedOrder.objects.filter(is_accepted=True).acount()
+    completed_orders_count = await models.CompletedOrder.objects.all().acount()
+    available_parts_count = await models.Part.objects.filter(is_available=True).acount()
+        
+    text += (
+        f"🕓 *{confirmed_orders_count} заказов* ожидают подтверждения\n\n"
+        f"📦 *{accepted_orders_count} заказов* доставляются\n\n"
+        f"✅ *{completed_orders_count} заказов* доставлено\n\n"
+        f"🛠 *{available_parts_count} товаров* доступно в каталоге\n\n"
+    )
+
+    text += f"\n*[уведомления о заказах]*\n"
+
+    if admin.is_notification_enabled:
+        text += f"🔔 включены"
+    else:
+        text += f"🔕 выключены"
+
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔄 обновить информацию", callback_data=str(top_states["ADMIN_PANEL"]))
+        ],
+        [
+            InlineKeyboardButton("🔔 вкл/выкл уведомления о заказах", callback_data=str(admin_panel_states["NOTIFICATIONS_ON_OFF"]))
+        ],
+        [
+            InlineKeyboardButton("🕓 выполняемые заказы", callback_data=str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]))
+        ],
+        [
+            InlineKeyboardButton("✅ завершенные заказы", callback_data=str(admin_panel_states["ALL_COMPLETED_ORDER_LIST"]))
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if callback is None:
+        await update.message.reply_photo(
+                photo=f"{CONFIG.URL}/static/img/bot/admin_panel.jpg",
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+    else:
+        try: # ingnore telegram.error.BadRequest: Message on the same message
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+
     return top_states["ADMIN_PANEL"]
+
+
+async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    "List of all confirmed orders from all users"
+
+    #TODO realize
+
+    text = CONFIG.CONFIRMED_ORDERS_TEXT
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔍 просмотреть заказ по №", callback_data=str(top_states["ADMIN_PANEL"]))
+        ],
+        [
+            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
+        ]
+    ]
+
+    confirmed_orders = models.ConfirmedOrder.objects.order_by()
+    
+    return admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]
+
+
+async def all_completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    "List of all completed orders from all users"
+
+    #TODO realize
+
+    text = CONFIG.CONFIRMED_ORDERS_TEXT
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔍 просмотреть заказ по №", callback_data=str(top_states["ADMIN_PANEL"]))
+        ],
+        [
+            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
+        ]
+    ]
+
+    completed_orders = None
+
+    return admin_panel_states["ALL_COMPLETED_ORDER_LIST"]
 
 
 async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -260,7 +352,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
     else:
-        text += CONFIG.ORDERS_EMPTY_TEXT
+        text += CONFIG.EMPTY_TEXT
 
         keyboard = [
             [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
@@ -362,7 +454,7 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
     else:
-        text += CONFIG.ORDERS_EMPTY_TEXT
+        text += CONFIG.EMPTY_TEXT
 
         keyboard = [
             [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
@@ -401,7 +493,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = CONFIG.CHOOSE_CATEGORY_TEXT
 
     keyboard = [
-        [InlineKeyboardButton(button_name, callback_data=str(top_states["CATEGORY_CARDS"]) + SPLIT + category)] 
+        [InlineKeyboardButton(button_name, callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT + category)] 
             for category, button_name in CONFIG.CATEGORY_CHOICES.items()
     ]
     keyboard += [
@@ -421,72 +513,54 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return top_states["CHOOSE_CATEGORY"]
 
 
-async def category_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Display all products in this category"""
-    
-    query = update.callback_query
-    await query.answer()
+async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Display message that this category doesn't have parts"""
 
-    category = query.data.split(SPLIT)[1]
-    context.user_data["category_part"] = category
+    category = context.user_data.get("category_part")
 
-    parts = models.Part.objects.filter(Q(is_available=True) & Q(category=category))
-
-    text = (
-        f"*[{CONFIG.CATEGORY_CHOICES[category]}]*\n"
-        f"\n\n"
-    )
+    text = f"*[{CONFIG.CATEGORY_CHOICES[category]}]*\n\n\n"
+    text += CONFIG.EMPTY_TEXT
 
     keyboard = [
-        [
-            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))
-        ]
+        [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["CHOOSE_CATEGORY"]))]
     ]
-
-    if await parts.aexists():
-        text += (
-            f"В наличии:\n\n"
-        )
-
-        keyboard.insert(0, [InlineKeyboardButton("➡️", callback_data=str(top_states["PRODUCT_CARDS"]))])
-
-        async for part in parts:
-            text += f"●  *{part.name}*, {part.available_count}шт.\n"
-
-    else:
-        text += (
-            f"Пока здесь пусто.."
-        )
-
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_media(
+    await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{CONFIG.URL}/static/img/categories/{category}.jpg",
+            media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
         reply_markup=reply_markup
     )
 
-    return top_states["CATEGORY_CARDS"]
+    return top_states["EMPTY_CATEGORY"]
 
 
 async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display all info about chosen product in this category"""
 
+    category = context.user_data.get("category_part")
+    first_call = False
+
     if update.callback_query is not None:
         query = update.callback_query
+        
         await query.answer()
 
         callback = query.data
+
+        if len(callback) > 2:
+            category = callback.split(SPLIT)[1]
+            context.user_data["category_part"] = category
+            first_call = True
+
         entered_part_count = None
     else:
         entered_part_count = int(update.message.text)
 
         callback = None
-
-    category = context.user_data.get("category_part")
 
     order_id = context.user_data.get("order_id")
     order = await models.Order.objects.aget(order_id=order_id)
@@ -497,8 +571,13 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     part_deleted_from_catalog = False
     part_not_enough_available_count = False
 
-    if callback == str(top_states["PRODUCT_CARDS"]):
+    if callback == str(top_states["PRODUCT_CARDS"]) or first_call:
         part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
+
+        if not part:
+            await empty_category(update, context)
+            return top_states["EMPTY_CATEGORY"]
+
         part_id = part.part_id
         
         context.user_data["part_id"] = part_id
@@ -524,8 +603,8 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     part_not_enough_available_count = True
                     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         else:
-            await start(update, context)
-            return top_states["START"]
+            await empty_category(update, context)
+            return top_states["EMPTY_CATEGORY"]
   
     if callback == str(product_card_states["NEXT"]):
         part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__gt=part_id)).afirst()
@@ -542,7 +621,8 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     part_not_enough_available_count = True
                     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         else:
-            await start(update, context)
+            await empty_category(update, context)
+            return top_states["EMPTY_CATEGORY"]
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
@@ -730,6 +810,17 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
+    text_to_admin = f"поступил заказ *№{order.order_id}* от @{user.username}"
+    
+    admins_with_notifacations_enabled = models.Admin.objects.filter(is_notification_enabled=True)
+
+    async for admin in admins_with_notifacations_enabled:
+        await context.bot.send_message(
+            chat_id=admin.admin_id,
+            text=text_to_admin,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    
     logger.info(f"[PTB] Order #{order.order_id} from user {user_id} confirmed")
 
 
@@ -863,7 +954,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return top_states["END"]
 
     else:
-        text += CONFIG.EMPTY_CART_TEXT
+        text += CONFIG.EMPTY_TEXT
         keyboard = [   
             [
                 InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
@@ -892,39 +983,9 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     return top_states["INTO_CART"]
 
-    
-async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
-    """Handle custom updates."""
-    chat_member = await context.bot.get_chat_member(chat_id=update.user_id, user_id=update.user_id)
-    payloads = context.user_data.setdefault("payloads", [])
-    payloads.append(update.payload)
-    combined_payloads = "</code>\n• <code>".join(payloads)
-    text = (
-        f"The user {chat_member.user.mention_html()} has sent a new payload. "
-        f"So far they have sent the following payloads: \n\n• <code>{combined_payloads}</code>"
-    )
-    await context.bot.send_message(chat_id=CONFIG.ADMIN_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
-
-
-# async def custom_updates(request: HttpRequest) -> HttpResponse:
-#     """Handle incoming webhook updates"""
-
-#     try:
-#         user_id = int(request.GET["user_id"])
-#         payload = request.GET["payload"]
-#     except KeyError:
-#         return HttpResponseBadRequest(
-#             "Please pass both `user_id` and `payload` as query parameters.",
-#         )
-#     except ValueError:
-#         return HttpResponseBadRequest("The `user_id` must be a string!")
-
-#     await ptb_application.update_queue.put(WebhookUpdate(user_id=user_id, payload=payload))
-#     return HttpResponse()
-
 
 # Set up PTB application and a web application for handling the incoming requests.
-context_types = ContextTypes(context=CustomContext)
+context_types = ContextTypes(context=CallbackContext)
 ptb_application = (
     Application.builder().token(CONFIG.TOKEN).updater(None).context_types(context_types).build()
 )
@@ -951,6 +1012,24 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     completed_order_list, 
                     pattern="^" + str(top_states["COMPLETED_ORDER_LIST"]) + "$"
+                )   
+            ],
+            top_states["ADMIN_PANEL"]: [
+                CallbackQueryHandler(
+                    admin_panel, 
+                    pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    admin_panel, 
+                    pattern="^" + str(admin_panel_states["NOTIFICATIONS_ON_OFF"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_completed_order_list, 
+                    pattern="^" + str(admin_panel_states["ALL_COMPLETED_ORDER_LIST"]) + "$"
                 )
             ],
             top_states["CONFIRMED_ORDER_LIST"]: [
@@ -987,19 +1066,15 @@ ptb_application.add_handler(
                     pattern="^" + str(top_states["START"]) + "$"
                 ),
                 CallbackQueryHandler(
-                    category_cards,
-                    pattern="^" + str(top_states["CATEGORY_CARDS"]) + "_[A-Z]{1,8}$"
+                    product_cards,
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
                 )
             ],
-            top_states["CATEGORY_CARDS"]: [
+            top_states["EMPTY_CATEGORY"]: [
                 CallbackQueryHandler(
                     choose_category, 
                     pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    product_cards,
-                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "$"
-                ),
+                )
             ],
             top_states["PRODUCT_CARDS"]: [
                 CallbackQueryHandler(
