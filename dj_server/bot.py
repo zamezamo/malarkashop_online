@@ -344,6 +344,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
         parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
+        accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
 
         text += (
             f"- заказ *№{order.order_id}* -\n"
@@ -352,7 +353,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
         )
 
         if order.is_accepted:
-            text += f"принят: ✅ _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            text += f"принят: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
         else:
             text += f"требует _подтверждения_ ❌\n\n"
 
@@ -486,6 +487,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
+        accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
 
         text += (
             f"- заказ *№{order.order_id}* -\n\n"
@@ -493,7 +495,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         if order.is_accepted:
-            text += f"принят: ✅ _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            text += f"принят: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
         else:
             text += f"принят: 🕓 _в обработке_\n\n"
 
