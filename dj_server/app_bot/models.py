@@ -1,43 +1,52 @@
-from datetime import datetime
+import datetime
 
 from django.db import models
 
 from dj_server.config import CATEGORY_CHOICES
 
 # Create your models here.
-def default_parts_list():
-    """part_{id}: count"""
-    return list({"part_0": 0})
 
 class Admin(models.Model):
-    admin_id = models.BigIntegerField()
+    admin_id = models.BigIntegerField(primary_key=True)
     is_notification_enabled = models.BooleanField(default=True)
 
 class User(models.Model):
-    user_id = models.BigIntegerField()
+    user_id = models.BigIntegerField(primary_key=True)
+    username = models.CharField(max_length=64, default="")
 
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
-    name = models.CharField(max_length=64)
-    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, default="OTHER")
-    description = models.TextField(max_length=256)
-    available_count = models.IntegerField(default=0)
+    is_available = models.BooleanField(default=True)
+    name = models.CharField(max_length=64, default="")
+    category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
+    description = models.TextField(max_length=256, default="")
+    price = models.FloatField(default=0.0)
+    available_count = models.PositiveIntegerField(default=0)
     image = models.FileField(
         upload_to="img/parts",
-        default="img/parts/no_img_part.jpg"
+        default="img/static/no_img_part.jpg"
     )
+    
 class Order(models.Model):
     order_id = models.BigAutoField(primary_key=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
-    parts = models.JSONField(default=default_parts_list)
-    ordered_time = models.DateTimeField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    parts = models.JSONField(default=dict)
+    cost = models.FloatField(default=0.0)
+
+class ConfirmedOrder(models.Model):
+    order_id = models.BigIntegerField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    parts = models.JSONField(default=dict)
+    cost = models.FloatField(default=0.0)
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
     is_accepted = models.BooleanField(default=False)
-    accepted_time = models.DateTimeField()
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
-    user_id = models.BigIntegerField()
-    parts = models.JSONField(default=default_parts_list)
-    ordered_time = models.DateTimeField()
-    accepted_time = models.DateTimeField()
-    completed_time = models.DateTimeField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    parts = models.JSONField(default=dict)
+    cost = models.FloatField(default=0.0)
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    completed_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
