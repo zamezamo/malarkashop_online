@@ -1,10 +1,10 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from dataclasses import dataclass
 
 import uvicorn
 from dj_server.asgi import application
+from asgiref.sync import sync_to_async
 
 from django.db.models import Q
 
@@ -53,9 +53,16 @@ top_states = {
 }
 
 admin_panel_states = {
-    "NOTIFICATIONS_ON_OFF": 2_0,
-    "ALL_CONFIRMED_ORDER_LIST": 2_1,
-    "ALL_COMPLETED_ORDER_LIST": 2_2
+    "NOTIFICATIONS_ON_OFF": 1_0,
+    "ALL_CONFIRMED_ORDER_LIST": 1_1
+}
+
+all_confirmed_order_states = {
+    "PREVIOUS": 2_0,
+    "NEXT": 2_1,
+    "ACCEPT_ORDER": 2_2,
+    "COMPLETE_ORDER": 2_3,
+    "CANCEL_ORDER": 2_4
 }
 
 confirmed_order_states = {
@@ -92,6 +99,8 @@ async def delete_last_msg(update: Update, context=None):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display start message"""
 
+    context.user_data.clear()
+
     query = update.callback_query
 
     user_id = update.effective_chat.id
@@ -99,37 +108,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not username:
         username = str(user_id)
 
-    context.user_data.clear()
+    keyboard = [
+        [
+            InlineKeyboardButton("🛍 перейти в каталог", callback_data=str(top_states["CHOOSE_CATEGORY"]))
+        ],
+        [
+            InlineKeyboardButton("🛒 корзина", callback_data=str(top_states["INTO_CART"]))
+        ],
+        [
+            InlineKeyboardButton("🕓 выполняемые заказы", callback_data=str(top_states["CONFIRMED_ORDER_LIST"]))
+        ],
+        [
+            InlineKeyboardButton("✅ завершенные заказы", callback_data=str(top_states["COMPLETED_ORDER_LIST"]))
+        ]
+    ]
     
-    if await (models.Admin.objects.filter(admin_id=user_id)).aexists():
-        await admin_panel(update, context)
-        return top_states["ADMIN_PANEL"]
+    if await models.Admin.objects.filter(admin_id=user_id).aexists():
+        keyboard.insert(
+            0,
+            [InlineKeyboardButton("[🪪 admin] войти", callback_data=str(top_states["ADMIN_PANEL"]))]
+        )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     user, _ = await models.User.objects.aupdate_or_create(user_id=user_id, username=username)
-    order, _ = await models.Order.objects.aget_or_create(user_id=user)
-
-    if user.username != username:
-        await models.User.objects.filter(user_id=user_id).aupdate(username=username)
+    order, _ = await models.Order.objects.aget_or_create(user=user)
 
     context.user_data["user_id"] = user.user_id
     context.user_data["order_id"] = order.order_id
-
-    keyboard = [
-        [
-            InlineKeyboardButton("🛍 перейти в каталог", callback_data=top_states["CHOOSE_CATEGORY"])
-        ],
-        [
-            InlineKeyboardButton("🛒 корзина", callback_data=top_states["INTO_CART"])
-        ],
-        [
-            InlineKeyboardButton("🕓 выполняемые заказы", callback_data=top_states["CONFIRMED_ORDER_LIST"])
-        ],
-        [
-            InlineKeyboardButton("✅ завершенные заказы", callback_data=top_states["COMPLETED_ORDER_LIST"])
-        ]
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
     if bool(query):
         text = CONFIG.START_OVER_TEXT
@@ -200,8 +206,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text += f"🔕 выключены"
 
-
     keyboard = [
+        [
+            InlineKeyboardButton("[🪪 admin] выйти", callback_data=str(top_states["START"]))
+        ],
         [
             InlineKeyboardButton("🔄 обновить информацию", callback_data=str(top_states["ADMIN_PANEL"]))
         ],
@@ -210,9 +218,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("🕓 выполняемые заказы", callback_data=str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]))
-        ],
-        [
-            InlineKeyboardButton("✅ завершенные заказы", callback_data=str(admin_panel_states["ALL_COMPLETED_ORDER_LIST"]))
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -240,43 +245,205 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     "List of all confirmed orders from all users"
 
-    #TODO realize
+    query = update.callback_query
+    callback = query.data
+    await query.answer()
 
-    text = CONFIG.CONFIRMED_ORDERS_TEXT
+    order = None
+    order_id = context.user_data.get("all_confirmed_order_id")
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🔍 просмотреть заказ по №", callback_data=str(top_states["ADMIN_PANEL"]))
-        ],
-        [
-            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
+    text = CONFIG.ALL_CONFIRMED_ORDERS_TEXT
+
+    if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
+        order = await models.ConfirmedOrder.objects.all().afirst()
+
+        if order:
+            order_id = order.order_id
+
+        context.user_data["all_confirmed_order_id"] = order_id
+
+    if callback == str(all_confirmed_order_states["PREVIOUS"]):
+        order = await models.ConfirmedOrder.objects.filter(order_id__lt=order_id).alast()
+        if not order:
+            order = await models.ConfirmedOrder.objects.all().alast()
+        if order:
+            context.user_data["all_confirmed_order_id"] = order.order_id
+
+    if callback == str(all_confirmed_order_states["NEXT"]):
+        order = await models.ConfirmedOrder.objects.filter(order_id__gt=order_id).afirst()
+        if not order:
+            order = await models.ConfirmedOrder.objects.all().afirst()
+        if order:
+            context.user_data["all_confirmed_order_id"] = order.order_id
+
+    if callback == str(all_confirmed_order_states["CANCEL_ORDER"]):
+        try:
+            order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+            
+            await models.ConfirmedOrder.objects.filter(order_id=order_id).adelete()
+
+            text_to_user = f"🔔 ваш заказ *№{order.order_id}*   ❌  отменён"
+
+            await context.bot.send_message(
+                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                text=text_to_user,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except:
+            order = None
+
+    if callback == str(all_confirmed_order_states["ACCEPT_ORDER"]):
+        try:
+            order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+
+            order.is_accepted = True
+            order.accepted_time = datetime.now(timezone.utc)
+            
+            await models.ConfirmedOrder.objects.filter(order_id=order_id).aupdate(
+                is_accepted = order.is_accepted,
+                accepted_time = order.accepted_time
+            )
+
+            text_to_user = f"🔔 ваш заказ *№{order.order_id}*   📥  принят"
+
+            await context.bot.send_message(
+                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                text=text_to_user,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except:
+            order = None
+
+    if callback == str(all_confirmed_order_states["COMPLETE_ORDER"]):
+        try:
+            order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+            
+            await models.CompletedOrder.objects.acreate(
+                order_id = order.order_id,
+                user = await sync_to_async(lambda: order.user)(),
+                parts = order.parts,
+                cost = order.cost,
+                ordered_time = order.ordered_time,
+                accepted_time = order.accepted_time,
+                completed_time = datetime.now(timezone.utc)
+            )
+
+            await models.ConfirmedOrder.objects.filter(order_id=order_id).adelete()
+
+            text_to_user = f"🔔 ваш заказ *№{order.order_id}*   ✅  завершён"
+
+            await context.bot.send_message(
+                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                text=text_to_user,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except:
+            order = None
+
+    if order:
+        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
+
+        ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
+
+        text += (
+            f"- заказ *№{order.order_id}* -\n"
+            f"- от @{await sync_to_async(lambda: order.user.username)()}\n\n"
+            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+        )
+
+        if order.is_accepted:
+            text += f"принят: ✅ _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+        else:
+            text += f"требует _подтверждения_ ❌\n\n"
+
+        async for part in parts:
+            count = order.parts[str(part.part_id)]
+            price = part.price
+            cost = count * price
+
+            text += (
+                f"● *{part.name}*, id:{part.part_id}\n"
+                f"{count}шт.x{price}р.= _{cost}р._\n"
+            )
+
+        text += f"\nстоимость: _{order.cost}р._\n\n"
+
+        if callback == str(all_confirmed_order_states["CANCEL_ORDER"]):
+            text += f"🗑 *заказ отменён и удалён у пользователя*"
+
+            keyboard = [
+                [InlineKeyboardButton("↩️ назад", callback_data=str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]))]
+            ]
+
+        elif callback == str(all_confirmed_order_states["COMPLETE_ORDER"]):
+            text += f"✅ *заказ завершён*"
+
+            keyboard = [
+                [InlineKeyboardButton("↩️ назад", callback_data=str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]))]
+            ]
+
+        elif order.is_accepted:
+            keyboard = [
+                [
+                    InlineKeyboardButton("⬅️", callback_data=str(all_confirmed_order_states["PREVIOUS"])),
+                    InlineKeyboardButton("➡️", callback_data=str(all_confirmed_order_states["NEXT"])),
+                ],
+                [
+                    InlineKeyboardButton("✅ завершить", callback_data=str(all_confirmed_order_states["COMPLETE_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("❌ отменить", callback_data=str(all_confirmed_order_states["CANCEL_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
+                ]
+            ]
+        else:
+            keyboard = [
+                [
+                    InlineKeyboardButton("⬅️", callback_data=str(all_confirmed_order_states["PREVIOUS"])),
+                    InlineKeyboardButton("➡️", callback_data=str(all_confirmed_order_states["NEXT"])),
+                ],
+                [
+                    InlineKeyboardButton("📥 принять", callback_data=str(all_confirmed_order_states["ACCEPT_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("❌ отменить", callback_data=str(all_confirmed_order_states["CANCEL_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
+                ]
+            ]
+
+    else:
+        text += CONFIG.EMPTY_TEXT
+
+        keyboard = [
+            [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))]
         ]
-    ]
 
-    confirmed_orders = models.ConfirmedOrder.objects.order_by()
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=f"{CONFIG.URL}/static/img/bot/confirmed_orders.jpg",
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
+            reply_markup=reply_markup
+        )
+    else:
+        try: # ingnore telegram.error.BadRequest: Message on the same message
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
     
     return admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]
-
-
-async def all_completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    "List of all completed orders from all users"
-
-    #TODO realize
-
-    text = CONFIG.CONFIRMED_ORDERS_TEXT
-
-    keyboard = [
-        [
-            InlineKeyboardButton("🔍 просмотреть заказ по №", callback_data=str(top_states["ADMIN_PANEL"]))
-        ],
-        [
-            InlineKeyboardButton("↩️ назад", callback_data=str(top_states["ADMIN_PANEL"]))
-        ]
-    ]
-
-    completed_orders = None
-
-    return admin_panel_states["ALL_COMPLETED_ORDER_LIST"]
 
 
 async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -295,23 +462,23 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     text = CONFIG.CONFIRMED_ORDERS_TEXT
 
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
-        order = await models.ConfirmedOrder.objects.filter(user_id=user).afirst()
+        order = await models.ConfirmedOrder.objects.filter(user=user).afirst()
         if order:
             order_id = order.order_id
 
         context.user_data["confirmed_order_id"] = order_id
 
     if callback == str(confirmed_order_states["PREVIOUS"]):
-        order = await models.ConfirmedOrder.objects.filter(Q(user_id=user) & Q(order_id__lt=order_id)).alast()
+        order = await models.ConfirmedOrder.objects.filter(Q(user=user) & Q(order_id__lt=order_id)).alast()
         if not order:
-            order = await models.ConfirmedOrder.objects.filter(user_id=user).alast()
+            order = await models.ConfirmedOrder.objects.filter(user=user).alast()
         if order:
             context.user_data["confirmed_order_id"] = order.order_id
 
     if callback == str(confirmed_order_states["NEXT"]):
-        order = await models.ConfirmedOrder.objects.filter(Q(user_id=user) & Q(order_id__gt=order_id)).afirst()
+        order = await models.ConfirmedOrder.objects.filter(Q(user=user) & Q(order_id__gt=order_id)).afirst()
         if not order:
-            order = await models.ConfirmedOrder.objects.filter(user_id=user).afirst()
+            order = await models.ConfirmedOrder.objects.filter(user=user).afirst()
         if order:
             context.user_data["confirmed_order_id"] = order.order_id
 
@@ -326,7 +493,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         if order.is_accepted:
-            text += f"принят: ✅ _{order.accepted_time.strftime("%d.%m.%Y %d.%m.%Y")}_\n\n"
+            text += f"принят: ✅ _{order.accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
         else:
             text += f"принят: 🕓 _в обработке_\n\n"
 
@@ -336,8 +503,8 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             cost = count * price
 
             text += (
-                f"●  *{part.name}*\n"
-                f"{count}шт. x {price}р. = _{cost}р._\n"
+                f"● *{part.name}*\n"
+                f"{count}шт.x{price}р.= _{cost}р._\n"
             )
 
         text += f"\nстоимость: _{order.cost}р._"
@@ -398,23 +565,23 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     text = CONFIG.COMPLETED_ORDERS_TEXT
 
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
-        order = await models.CompletedOrder.objects.filter(user_id=user).afirst()
+        order = await models.CompletedOrder.objects.filter(user=user).afirst()
         if order:
             order_id = order.order_id
 
         context.user_data["completed_order_id"] = order_id
 
     if callback == str(completed_order_states["PREVIOUS"]):
-        order = await models.CompletedOrder.objects.filter(Q(user_id=user) & Q(order_id__lt=order_id)).alast()
+        order = await models.CompletedOrder.objects.filter(Q(user=user) & Q(order_id__lt=order_id)).alast()
         if not order:
-            order = await models.CompletedOrder.objects.filter(user_id=user).alast()
+            order = await models.CompletedOrder.objects.filter(user=user).alast()
         if order:
             context.user_data["completed_order_id"] = order.order_id
 
     if callback == str(completed_order_states["NEXT"]):
-        order = await models.CompletedOrder.objects.filter(Q(user_id=user) & Q(order_id__gt=order_id)).afirst()
+        order = await models.CompletedOrder.objects.filter(Q(user=user) & Q(order_id__gt=order_id)).afirst()
         if not order:
-            order = await models.CompletedOrder.objects.filter(user_id=user).afirst()
+            order = await models.CompletedOrder.objects.filter(user=user).afirst()
         if order:
             context.user_data["completed_order_id"] = order.order_id
 
@@ -438,8 +605,8 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             cost = count * price
 
             text += (
-                f"●  *{part.name}*\n"
-                f"{count}шт. x {price}р. = _{cost}р._\n"
+                f"● *{part.name}*\n"
+                f"{count}шт.x{price}р.= _{cost}р._\n"
             )
 
         text += f"\nстоимость: _{order.cost}р._"
@@ -739,7 +906,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.edit_message_media(
             chat_id=update.effective_chat.id,
-            message_id=context.user_data.get("msg_id"),
+            message_id=context.user_data.get("msg_id_before_input"),
             media=InputMediaPhoto(
                 media=img,
                 caption=text,
@@ -764,7 +931,7 @@ async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes
         parse_mode=ParseMode.MARKDOWN
     )
 
-    context.user_data["msg_id"] = query.message.message_id
+    context.user_data["msg_id_before_input"] = query.message.message_id
 
     return product_card_states["GET_PART_BY_ID"]
 
@@ -778,7 +945,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await models.ConfirmedOrder.objects.acreate(
         order_id = order.order_id,
-        user_id = user,
+        user = user,
         parts = order.parts,
         cost = order.cost,
         ordered_time = datetime.now(timezone.utc)
@@ -810,18 +977,18 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    text_to_admin = f"поступил заказ *№{order.order_id}* от @{user.username}"
+    text_to_admin = f"🔔 поступил заказ *№{order.order_id}* от @{user.username}"
     
-    admins_with_notifacations_enabled = models.Admin.objects.filter(is_notification_enabled=True)
+    admins_with_notifications_enabled = models.Admin.objects.filter(is_notification_enabled=True)
 
-    async for admin in admins_with_notifacations_enabled:
+    async for admin in admins_with_notifications_enabled:
         await context.bot.send_message(
             chat_id=admin.admin_id,
             text=text_to_admin,
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    logger.info(f"[PTB] Order #{order.order_id} from user {user_id} confirmed")
+    logger.info(f"[PTB] Order #{order.order_id} from user {user.username} confirmed")
 
 
 async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -849,8 +1016,8 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 price = part.price
                 cost = count * price
                 text += (
-                    f"●  *{part.name}*\n"
-                    f"{count}шт. x {price}р. = _{cost}р._\n"
+                    f"● *{part.name}*\n"
+                    f"{count}шт.x{price}р.= _{cost}р._\n"
                 )
                 order.cost += cost
 
@@ -874,8 +1041,8 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 price = part.price
                 cost = count * price
                 text += (
-                    f"●  *{part.name}*\n"
-                    f"{count}шт. x {price}р. = _{cost}р._\n"
+                    f"● *{part.name}*\n"
+                    f"{count}шт.x{price}р.= _{cost}р._\n"
                 )
 
                 order.cost += cost
@@ -906,7 +1073,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if part.is_available == False:
                     text += (
-                        f"●  *{part.name}*\n"
+                        f"● *{part.name}*\n"
                         f"{order.parts[str(part_id)]}шт.\n"
                         f"_[удалено из каталога]_,\n"
                     )
@@ -920,8 +1087,8 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     if order.parts[str(part_id)] > part.available_count:
                         text += (
-                            f"●  *{part.name}*\n"
-                            f"{count}шт. x {price}р. = _{cost}р._\n"
+                            f"● *{part.name}*\n"
+                            f"{count}шт.x{price}р.= _{cost}р._\n"
                             f"_[выст. макс. дост. кол-во]_,\n"
                         )
 
@@ -929,8 +1096,8 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         parts_id_not_enough_available_count.append(part_id)
                     else:
                         text += (
-                            f"●  *{part.name}*\n"
-                            f"{count}шт. x {price}р. = _{cost}р._\n"
+                            f"● *{part.name}*\n"
+                            f"{count}шт.x{price}р.= _{cost}р._\n"
                         )
                         order.cost += cost
 
@@ -1012,7 +1179,11 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     completed_order_list, 
                     pattern="^" + str(top_states["COMPLETED_ORDER_LIST"]) + "$"
-                )   
+                ),
+                CallbackQueryHandler(
+                    admin_panel, 
+                    pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
+                ) 
             ],
             top_states["ADMIN_PANEL"]: [
                 CallbackQueryHandler(
@@ -1028,8 +1199,38 @@ ptb_application.add_handler(
                     pattern="^" + str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]) + "$"
                 ),
                 CallbackQueryHandler(
-                    all_completed_order_list, 
-                    pattern="^" + str(admin_panel_states["ALL_COMPLETED_ORDER_LIST"]) + "$"
+                    start, 
+                    pattern="^" + str(top_states["START"]) + "$"
+                )
+            ],
+            admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]: [
+                CallbackQueryHandler(
+                    admin_panel, 
+                    pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list,
+                    pattern="^" + str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["PREVIOUS"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["NEXT"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["ACCEPT_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["COMPLETE_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["CANCEL_ORDER"]) + "$"
                 )
             ],
             top_states["CONFIRMED_ORDER_LIST"]: [

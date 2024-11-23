@@ -6,7 +6,7 @@ TITLE = 'AutoCustomersStore'
 BOT_LINK="tg://resolve?domain=autocosmeticsstore_bot"
 
 # Define bot configuration constants
-URL = "https://ef6f-178-124-178-90.ngrok-free.app"
+URL = "https://3ced-178-127-82-21.ngrok-free.app"
 ADMIN_CHAT_ID = 542399495 # @zamezamo
 PORT = 8000
 TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # KEEP IT IN SECRET!
@@ -80,6 +80,10 @@ ORDER_CONFIRMATION_ERROR_TEXT = (
 
 CONFIRMED_ORDERS_TEXT = (
     f"*[🕓 ваши заказы]*\n\n\n"
+)
+
+ALL_CONFIRMED_ORDERS_TEXT = (
+    f"*[🕓 выполняемые заказы]*\n\n\n"
 )
 
 COMPLETED_ORDERS_TEXT = (
