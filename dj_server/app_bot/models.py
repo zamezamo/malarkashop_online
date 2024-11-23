@@ -7,17 +7,17 @@ from dj_server.config import CATEGORY_CHOICES
 # Create your models here.
 
 class Admin(models.Model):
-    admin_id = models.BigIntegerField()
+    admin_id = models.BigIntegerField(primary_key=True)
     is_notification_enabled = models.BooleanField(default=True)
 
 class User(models.Model):
-    user_id = models.BigIntegerField()
+    user_id = models.BigIntegerField(primary_key=True)
     username = models.CharField(max_length=64, default="")
 
 class Part(models.Model):
     part_id = models.BigAutoField(primary_key=True)
     is_available = models.BooleanField(default=True)
-    name = models.CharField(max_length=128, default="")
+    name = models.CharField(max_length=64, default="")
     category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
     description = models.TextField(max_length=256, default="")
     price = models.FloatField(default=0.0)
@@ -29,13 +29,13 @@ class Part(models.Model):
     
 class Order(models.Model):
     order_id = models.BigAutoField(primary_key=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
 
 class ConfirmedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
     ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
@@ -44,7 +44,7 @@ class ConfirmedOrder(models.Model):
 
 class CompletedOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     parts = models.JSONField(default=dict)
     cost = models.FloatField(default=0.0)
     ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
