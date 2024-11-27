@@ -10,11 +10,9 @@ class AdminArticle(admin.ModelAdmin):
 
 
 class UserArticle(admin.ModelAdmin):
-    list_display = ['user_id', 'username', 'name', 'phone_number']
+    list_display = ['user_id', 'username', 'name', 'phone_number', 'delivery_address']
 
-    ordering = ['user_id', 'username', 'name']
-
-    search_fields = ['username', 'name', 'phone_number']
+    search_fields = ['username', 'name', 'phone_number', 'delivery_address']
 
 
 class PartArticle(admin.ModelAdmin):
