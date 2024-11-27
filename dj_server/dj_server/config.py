@@ -2,30 +2,14 @@ from datetime import timedelta
 
 TZ_OFFSET = timedelta(hours=3)
 
-TITLE = 'AutoCustomersStore'
-BOT_LINK="tg://resolve?domain=autocosmeticsstore_bot"
+TITLE = 'AutoCosmeticsStore'
+CHANNEL_LINK="tg://resolve?domain=autocosmeticsstore_bot"
 
 # Define bot configuration constants
-URL = "https://3ced-178-127-82-21.ngrok-free.app"
+URL = "https://623d-178-124-178-90.ngrok-free.app"
 ADMIN_CHAT_ID = 542399495 # @zamezamo
 PORT = 8000
 TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # KEEP IT IN SECRET!
-
-START_TEXT = (
-    f"Добро пожаловать в *{TITLE}*!\n"
-    f"Подписывайтесь на наш [канал]({BOT_LINK})!\n"
-    f"\n"
-    f"описание\nописание\nописание\nописание\n"
-    f"\n"
-)
-
-START_OVER_TEXT = (
-    f"*{TITLE}*\n"
-    f"Подписывайтесь на наш [канал]({BOT_LINK})!\n"
-    f"\n"
-    f"описание\nописание\nописание\nописание\n"
-    f"\n"
-)
 
 ADMIN_PANEL_TEXT = (
     f"*{TITLE}*\n"
@@ -46,8 +30,21 @@ EMPTY_TEXT = (
 )
 
 ENTER_PARTS_COUNT_TEXT = (
-    f"введи количество товара, которое хочешь добавить в корзину\n\n"
+    f"введите количество товара, которое хотите добавить в корзину\n\n"
     f"*0* - _удалить из корзины_"
+)
+
+ENTER_USER_NAME_TEXT = (
+    f"как к вам обращаться? (макс. 32 симв.)"
+)
+
+ENTER_USER_PHONE_NUMBER_TEXT = (
+    f"ваш телефон?\n"
+    f"в следующем формате: _(25, 29, 33, 44)xxxxxxx_ (9 цифр после +375)"
+)
+
+ENTER_USER_DELIVERY_ADDRESS_TEXT = (
+    f"адрес доставки? (макс. 64 симв.)"
 )
 
 PART_DELETED_FROM_CATALOG_ERROR_TEXT = (

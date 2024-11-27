@@ -43,50 +43,60 @@ SPLIT = "_"
 top_states = {
     "START": 0,
     "ADMIN_PANEL": 1,
-    "CHOOSE_CATEGORY": 2,
-    "EMPTY_CATEGORY": 3,
-    "PRODUCT_CARDS": 4,
-    "INTO_CART": 5,
-    "CONFIRMED_ORDER_LIST": 6,
-    "COMPLETED_ORDER_LIST": 7,
-    "END": 8
+    "USER_PROFILE_EDIT": 2,
+    "CHOOSE_CATEGORY": 3,
+    "EMPTY_CATEGORY": 4,
+    "PRODUCT_CARDS": 5,
+    "INTO_CART": 6,
+    "CONFIRMED_ORDER_LIST": 7,
+    "COMPLETED_ORDER_LIST": 8,
+    "END": 9
+}
+
+user_profile_edit_states = {
+    "ENTER_NAME": 2_0,
+    "ENTER_PHONE_NUMBER": 2_1,
+    "ENTER_DELIVERY_ADDRESS": 2_2,
+    "GET_NAME": 2_3,
+    "GET_PHONE_NUMBER": 2_4,
+    "GET_DELIVERY_ADDRESS": 2_5,
 }
 
 admin_panel_states = {
-    "NOTIFICATIONS_ON_OFF": 1_0,
-    "ALL_CONFIRMED_ORDER_LIST": 1_1
+    "NOTIFICATIONS_ON_OFF": 3_0,
+    "ALL_CONFIRMED_ORDER_LIST": 3_1
 }
 
 all_confirmed_order_states = {
-    "PREVIOUS": 2_0,
-    "NEXT": 2_1,
-    "ACCEPT_ORDER": 2_2,
-    "COMPLETE_ORDER": 2_3,
-    "CANCEL_ORDER": 2_4
+    "PREVIOUS": 4_0,
+    "NEXT": 4_1,
+    "ACCEPT_ORDER": 4_2,
+    "COMPLETE_ORDER": 4_3,
+    "CANCEL_ORDER": 4_4
 }
 
 confirmed_order_states = {
-    "PREVIOUS": 3_0,
-    "NEXT": 3_1,
+    "PREVIOUS": 5_0,
+    "NEXT": 5_1,
 }
 
 completed_order_states = {
-    "PREVIOUS": 4_0,
-    "NEXT": 4_1,
+    "PREVIOUS": 6_0,
+    "NEXT": 6_1,
 }
 
 product_card_states = {
-    "PREVIOUS": 5_0,
-    "NEXT": 5_1,
-    "ADD": 5_2,
-    "REMOVE": 5_3,
-    "ENTER_COUNT": 5_4,
-    "GET_PART_BY_ID": 5_5
+    "PREVIOUS": 7_0,
+    "NEXT": 7_1,
+    "ADD": 7_2,
+    "REMOVE": 7_3,
+    "ENTER_COUNT": 7_4,
+    "GET_PART_BY_ID": 7_5
 }
 
 into_cart_states = {
-    "MAKE_ORDER": 6_0,
-    "CONFIRM_ORDER": 6_1
+    "MAKE_ORDER": 8_0,
+    "CONFIRM_ORDER": 8_1
 }
 
 
@@ -104,9 +114,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
     user_id = update.effective_chat.id
-    username = update.effective_chat.username
-    if not username:
-        username = str(user_id)
+    try:
+        user = await models.User.objects.aget(user_id=user_id)
+    except:
+        context.user_data["is_user_registration"] = True
+
+        await delete_last_msg(update)
+        await user_profile_edit(update, context)
+        return top_states["USER_PROFILE_EDIT"]
+    
+    order, _ = await models.Order.objects.aget_or_create(user=user)
 
     keyboard = [
         [
@@ -120,6 +137,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("✅ завершенные заказы", callback_data=str(top_states["COMPLETED_ORDER_LIST"]))
+        ],
+        [
+            InlineKeyboardButton("📝 редактировать профиль", callback_data=str(top_states["USER_PROFILE_EDIT"]))
         ]
     ]
     
@@ -131,14 +151,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    user, _ = await models.User.objects.aupdate_or_create(user_id=user_id, username=username)
-    order, _ = await models.Order.objects.aget_or_create(user=user)
-
     context.user_data["user_id"] = user.user_id
     context.user_data["order_id"] = order.order_id
 
     if bool(query):
-        text = CONFIG.START_OVER_TEXT
+        text = (
+            f"*{CONFIG.TITLE}*\n"
+            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*\n\n"
+            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
+            f"описание\nописание\nописание\nописание\n"
+        )
 
         await query.edit_message_media(
             media=InputMediaPhoto(
@@ -152,7 +174,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await delete_last_msg(update)
 
-        text = CONFIG.START_TEXT
+        text = (
+            f"*{CONFIG.TITLE}*\n"
+            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*\n\n"
+            f"описание\nописание\nописание\nописание\n\n"
+            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!"
+        )
 
         await update.message.reply_photo(
             photo=f"{CONFIG.URL}/static/img/bot/logo.jpg",
@@ -162,6 +189,226 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     return top_states["START"]
+
+
+async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Edit user profile settings"""
+
+    callback = None
+    if update.callback_query is not None:
+        query = update.callback_query
+        await query.answer()
+
+        callback = query.data
+
+    user_id = update.effective_chat.id
+    tg_username = update.effective_chat.username
+
+    if tg_username is None:
+        tg_username = "@id_" + str(user_id)
+
+    user_name = context.user_data.get("user_name")
+    user_phone_number = context.user_data.get("user_phone_number")
+    user_delivery_address = context.user_data.get("user_delivery_address")
+
+    keyboard = [
+        [
+            InlineKeyboardButton("👤 указать имя", callback_data=str(user_profile_edit_states["ENTER_NAME"]))
+        ],
+        [
+            InlineKeyboardButton("📞 указать моб. телефон", callback_data=str(user_profile_edit_states["ENTER_PHONE_NUMBER"]))
+        ],
+        [
+            InlineKeyboardButton("📍 указать адрес доставки", callback_data=str(user_profile_edit_states["ENTER_DELIVERY_ADDRESS"]))
+        ]
+    ]
+
+    if context.user_data.get("is_user_registration"):
+        text = (
+            f"Добро пожаловать в *{CONFIG.TITLE}*!\n\n"
+            f"описание\nописание\nописание\nописание\n"
+            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
+            f"📝 *регистрация пользователя*\n\n"
+        )
+
+        if user_name:
+            text += f"👤 *ваше имя*: _{user_name}_\n"
+        else:
+            text += f"👤 *ваше имя*: _не указано_\n"
+
+        if user_phone_number:
+            text += f"📞 *телефон*: _+375{user_phone_number}_\n"
+        else:
+            text += f"📞 *телефон*: _не указан_\n"
+
+        if user_delivery_address:
+            text += f"📍 *адрес доставки*: _{user_delivery_address}_\n"
+        else:
+            text += f"📍 *адрес доставки*: _не указан_\n"
+
+        if user_name and user_phone_number and user_delivery_address:
+            keyboard.append(
+                [InlineKeyboardButton("✅ готово", callback_data=str(top_states["START"]))]
+            )
+
+            await models.User.objects.aupdate_or_create(
+                user_id=user_id,
+                username=tg_username,
+                name=user_name,
+                phone_number=user_phone_number,
+                delivery_address=user_delivery_address
+            )
+
+    else:
+        text = (
+            f"*{CONFIG.TITLE}*\n\n"
+            f"📝 *редактирование профиля*\n\n"
+        )
+
+        keyboard.append(
+            [InlineKeyboardButton("↩️ назад", callback_data=str(top_states["START"]))]
+        )
+
+        user = await models.User.objects.aget(user_id=user_id)
+
+        if user_name:
+            user.name = user_name
+
+        if user_phone_number:
+            user.phone_number = user_phone_number
+
+        if user_delivery_address:
+            user.delivery_address = user_delivery_address
+
+        text += (
+            f"👤 *ваше имя*: _{user.name}_\n"
+            f"📞 *телефон*: _+375{user.phone_number}_\n"
+            f"📍 *адрес доставки*: _{user.delivery_address}_\n"
+        )
+
+        await models.User.objects.aupdate(
+                user_id=user_id,
+                username=tg_username,
+                name=user.name,
+                phone_number=user.phone_number,
+                delivery_address=user.delivery_address
+            )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if context.user_data.get("msg_id") == None and callback == None:
+        await update.message.reply_photo(
+            photo=f"{CONFIG.URL}/static/img/bot/user_profile_edit.jpg",
+            caption=text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    elif callback == str(top_states["USER_PROFILE_EDIT"]):
+        await query.edit_message_caption(
+            caption=text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
+        )
+    else:
+        await context.bot.edit_message_media(
+            chat_id=update.effective_chat.id,
+            message_id=context.user_data.get("msg_id"),
+            media=InputMediaPhoto(
+                media=f"{CONFIG.URL}/static/img/bot/user_profile_edit.jpg",
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
+            reply_markup=reply_markup
+        )
+
+    return top_states["USER_PROFILE_EDIT"]
+
+
+async def ask_for_enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask user for enter his name"""
+
+    query = update.callback_query
+    await query.answer()
+
+    text = CONFIG.ENTER_USER_NAME_TEXT
+    
+    await query.edit_message_caption(
+        caption=text,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    context.user_data["msg_id"] = query.message.message_id
+
+    return user_profile_edit_states["GET_NAME"]
+
+
+async def ask_for_enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask user for enter his phone number"""
+
+    query = update.callback_query
+    await query.answer()
+
+    text = CONFIG.ENTER_USER_PHONE_NUMBER_TEXT
+    
+    await query.edit_message_caption(
+        caption=text,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    context.user_data["msg_id"] = query.message.message_id
+
+    return user_profile_edit_states["GET_PHONE_NUMBER"]
+
+
+async def ask_for_enter_delivery_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask user for enter delivery address"""
+
+    query = update.callback_query
+    await query.answer()
+
+    text = CONFIG.ENTER_USER_DELIVERY_ADDRESS_TEXT
+    
+    await query.edit_message_caption(
+        caption=text,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    context.user_data["msg_id"] = query.message.message_id
+
+    return user_profile_edit_states["GET_DELIVERY_ADDRESS"]
+
+
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get entered user's name"""
+
+    await delete_last_msg(update)
+
+    context.user_data["user_name"] = update.message.text
+    await user_profile_edit(update, context)
+
+    return top_states["USER_PROFILE_EDIT"]
+
+
+async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get entered user's phone number"""
+
+    await delete_last_msg(update)
+
+    context.user_data["user_phone_number"] = update.message.text
+    await user_profile_edit(update, context)
+
+    return top_states["USER_PROFILE_EDIT"]
+  
+
+async def get_delivery_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get entered user's delivery address"""
+
+    await delete_last_msg(update)
+
+    context.user_data["user_delivery_address"] = update.message.text
+    await user_profile_edit(update, context)
+
+    return top_states["USER_PROFILE_EDIT"]
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -282,7 +529,23 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             
             await models.ConfirmedOrder.objects.filter(order_id=order_id).adelete()
 
-            text_to_user = f"🔔 ваш заказ *№{order.order_id}*   ❌  отменён"
+            text_to_user = (
+                f"🔔 ваш заказ *№{order.order_id}*   ❌  отменён\n\n"
+                f"_товары в заказе:_\n"
+            )
+
+            parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
+            async for part in parts:
+                count = order.parts[str(part.part_id)]
+                price = part.price
+                cost = count * price
+
+                text_to_user += (
+                    f"● *{part.name}*\n"
+                    f"{count}шт.x{price}р.= _{cost}р._\n"
+                )
+
+            text_to_user += f"\nстоимость: _{order.cost}р._"
 
             await context.bot.send_message(
                 chat_id=await sync_to_async(lambda: order.user.user_id)(),
@@ -346,16 +609,21 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
         accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
 
+        order_user = await sync_to_async(lambda: order.user)()
+
         text += (
             f"- заказ *№{order.order_id}* -\n"
-            f"- от @{await sync_to_async(lambda: order.user.username)()}\n\n"
-            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"- от @{order_user.username} -\n\n"
+            f"👤 *на имя*: _{order_user.name}_\n"
+            f"📞 *телефон*: _+375{order_user.phone_number}_\n"
+            f"📍 *адрес*: _{order_user.delivery_address}_\n\n"
+            f"*оформлен*: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
         )
 
         if order.is_accepted:
-            text += f"принят: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            text += f"*принят*: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
         else:
-            text += f"требует _подтверждения_ ❌\n\n"
+            text += f"*требует подтверждения* ❌\n\n"
 
         async for part in parts:
             count = order.parts[str(part.part_id)]
@@ -363,7 +631,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             cost = count * price
 
             text += (
-                f"● *{part.name}*, id:{part.part_id}\n"
+                f"● *{part.name}*, id: *{part.part_id}*\n"
                 f"{count}шт.x{price}р.= _{cost}р._\n"
             )
 
@@ -908,7 +1176,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.edit_message_media(
             chat_id=update.effective_chat.id,
-            message_id=context.user_data.get("msg_id_before_input"),
+            message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
                 media=img,
                 caption=text,
@@ -933,7 +1201,7 @@ async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes
         parse_mode=ParseMode.MARKDOWN
     )
 
-    context.user_data["msg_id_before_input"] = query.message.message_id
+    context.user_data["msg_id"] = query.message.message_id
 
     return product_card_states["GET_PART_BY_ID"]
 
@@ -979,7 +1247,25 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    text_to_admin = f"🔔 поступил заказ *№{order.order_id}* от @{user.username}"
+    text_to_admin = (
+        f"🔔 поступил заказ *№{order.order_id}* от @{user.username}\n\n"
+        f"👤 *на имя*: {user.name}\n"
+        f"📞 *телефон*: +375{user.phone_number}\n"
+        f"📍 *адрес*: {user.delivery_address}\n\n"
+        f"_товары в заказе:_\n"
+    )
+
+    async for part in parts:
+        count = order.parts[str(part.part_id)]
+        price = part.price
+        cost = count * price
+
+        text_to_admin += (
+            f"● *{part.name}*, id: *{part.part_id}*\n"
+            f"{count}шт.x{price}р.= _{cost}р._\n"
+        )
+
+    text_to_admin += f"\nстоимость: _{order.cost}р._"
     
     admins_with_notifications_enabled = models.Admin.objects.filter(is_notification_enabled=True)
 
@@ -990,7 +1276,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    logger.info(f"[PTB] Order #{order.order_id} from user {user.username} confirmed")
+    logger.info(f"[PTB] Order #{order.order_id} from user @{user.username} confirmed")
 
 
 async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1165,6 +1451,7 @@ ptb_application.add_handler(
     ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+
             top_states["START"]: [
                 CallbackQueryHandler(
                     choose_category, 
@@ -1185,8 +1472,13 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     admin_panel, 
                     pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
-                ) 
+                ),
+                CallbackQueryHandler(
+                    user_profile_edit, 
+                    pattern="^" + str(top_states["USER_PROFILE_EDIT"]) + "$"
+                )
             ],
+
             top_states["ADMIN_PANEL"]: [
                 CallbackQueryHandler(
                     admin_panel, 
@@ -1205,64 +1497,26 @@ ptb_application.add_handler(
                     pattern="^" + str(top_states["START"]) + "$"
                 )
             ],
-            admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]: [
-                CallbackQueryHandler(
-                    admin_panel, 
-                    pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list,
-                    pattern="^" + str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list, 
-                    pattern="^" + str(all_confirmed_order_states["PREVIOUS"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list, 
-                    pattern="^" + str(all_confirmed_order_states["NEXT"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list, 
-                    pattern="^" + str(all_confirmed_order_states["ACCEPT_ORDER"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list, 
-                    pattern="^" + str(all_confirmed_order_states["COMPLETE_ORDER"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    all_confirmed_order_list, 
-                    pattern="^" + str(all_confirmed_order_states["CANCEL_ORDER"]) + "$"
-                )
-            ],
-            top_states["CONFIRMED_ORDER_LIST"]: [
+
+            top_states["USER_PROFILE_EDIT"]: [
                 CallbackQueryHandler(
                     start, 
                     pattern="^" + str(top_states["START"]) + "$"
                 ),
                 CallbackQueryHandler(
-                    confirmed_order_list, 
-                    pattern="^" + str(confirmed_order_states["PREVIOUS"]) + "$"
+                    ask_for_enter_name,
+                    pattern="^" + str(user_profile_edit_states["ENTER_NAME"]) + "$"
                 ),
                 CallbackQueryHandler(
-                    confirmed_order_list, 
-                    pattern="^" + str(confirmed_order_states["NEXT"]) + "$"
+                    ask_for_enter_phone_number,
+                    pattern="^" + str(user_profile_edit_states["ENTER_PHONE_NUMBER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    ask_for_enter_delivery_address,
+                    pattern="^" + str(user_profile_edit_states["ENTER_DELIVERY_ADDRESS"]) + "$"
                 )
             ],
-            top_states["COMPLETED_ORDER_LIST"]: [
-                CallbackQueryHandler(
-                    start, 
-                    pattern="^" + str(top_states["START"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    completed_order_list, 
-                    pattern="^" + str(completed_order_states["PREVIOUS"]) + "$"
-                ),
-                CallbackQueryHandler(
-                    completed_order_list, 
-                    pattern="^" + str(completed_order_states["NEXT"]) + "$"
-                )
-            ],
+
             top_states["CHOOSE_CATEGORY"]: [
                 CallbackQueryHandler(
                     start, 
@@ -1273,12 +1527,14 @@ ptb_application.add_handler(
                     pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
                 )
             ],
+
             top_states["EMPTY_CATEGORY"]: [
                 CallbackQueryHandler(
                     choose_category, 
                     pattern="^" + str(top_states["CHOOSE_CATEGORY"]) + "$"
                 )
             ],
+
             top_states["PRODUCT_CARDS"]: [
                 CallbackQueryHandler(
                     choose_category, 
@@ -1313,6 +1569,7 @@ ptb_application.add_handler(
                     pattern="^" + str(top_states["INTO_CART"]) + "$"
                 )
             ],
+
             top_states["INTO_CART"]: [
                 CallbackQueryHandler(
                     start,
@@ -1327,11 +1584,91 @@ ptb_application.add_handler(
                     pattern="^" + str(into_cart_states["CONFIRM_ORDER"]) + "$"
                 )
             ],
+
+            top_states["CONFIRMED_ORDER_LIST"]: [
+                CallbackQueryHandler(
+                    start, 
+                    pattern="^" + str(top_states["START"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    confirmed_order_list, 
+                    pattern="^" + str(confirmed_order_states["PREVIOUS"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    confirmed_order_list, 
+                    pattern="^" + str(confirmed_order_states["NEXT"]) + "$"
+                )
+            ],
+
+            top_states["COMPLETED_ORDER_LIST"]: [
+                CallbackQueryHandler(
+                    start, 
+                    pattern="^" + str(top_states["START"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    completed_order_list, 
+                    pattern="^" + str(completed_order_states["PREVIOUS"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    completed_order_list, 
+                    pattern="^" + str(completed_order_states["NEXT"]) + "$"
+                )
+            ],
+
             top_states["END"]: [],
+
+
+            user_profile_edit_states["GET_NAME"]: [
+                MessageHandler(filters.Regex("^[а-яёА-Я ]{2,32}$"), get_name),
+                MessageHandler(~filters.Regex("^[а-яёА-Я ]{2,32}$"), delete_last_msg)
+            ],
+            user_profile_edit_states["GET_PHONE_NUMBER"]: [
+                MessageHandler(filters.Regex("^[0-9]{9}$"), get_phone_number),
+                MessageHandler(~filters.Regex("^[0-9]{9}$"), delete_last_msg)
+            ],
+            user_profile_edit_states["GET_DELIVERY_ADDRESS"]: [
+                MessageHandler(filters.Regex("^[0-9а-яёА-Я/,. ]{2,64}$"), get_delivery_address),
+                MessageHandler(~filters.Regex("^[0-9а-яёА-Я/,. ]{2,64}$"), delete_last_msg)
+            ],
+
+            
+            admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]: [
+                CallbackQueryHandler(
+                    admin_panel, 
+                    pattern="^" + str(top_states["ADMIN_PANEL"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list,
+                    pattern="^" + str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["PREVIOUS"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["NEXT"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["ACCEPT_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["COMPLETE_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    all_confirmed_order_list, 
+                    pattern="^" + str(all_confirmed_order_states["CANCEL_ORDER"]) + "$"
+                )
+            ],
+
+
             product_card_states["GET_PART_BY_ID"]: [
                 MessageHandler(filters.Regex("^[0-9]{1,}$"), product_cards),
-                MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg),
-            ],
+                MessageHandler(~filters.Regex("^[0-9]{1,}$"), delete_last_msg)
+            ]
+
         },
         fallbacks=[CommandHandler("start", start)],
         per_message=False,
