@@ -617,11 +617,11 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             f"👤 *на имя*: _{order_user.name}_\n"
             f"📞 *телефон*: _+375{order_user.phone_number}_\n"
             f"📍 *адрес*: _{order_user.delivery_address}_\n\n"
-            f"*оформлен*: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"*оформлен*: _{ordered_time.strftime('%d.%m.%Y %H:%M')}_\n"
         )
 
         if order.is_accepted:
-            text += f"*принят*: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            text += f"*принят*: ✅ _{accepted_time.strftime('%d.%m.%Y %H:%M')}_\n\n"
         else:
             text += f"*требует подтверждения* ❌\n\n"
 
@@ -759,11 +759,11 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
 
         text += (
             f"- заказ *№{order.order_id}* -\n\n"
-            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
+            f"оформлен: _{ordered_time.strftime('%d.%m.%Y %H:%M')}_\n"
         )
 
         if order.is_accepted:
-            text += f"принят: ✅ _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            text += f"принят: ✅ _{accepted_time.strftime('%d.%m.%Y %H:%M')}_\n\n"
         else:
             text += f"принят: 🕓 _в обработке_\n\n"
 
@@ -864,9 +864,9 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
 
         text += (
             f"- заказ *№{order.order_id}* -\n\n"
-            f"оформлен: _{ordered_time.strftime("%d.%m.%Y %H:%M")}_\n"
-            f"принят: _{accepted_time.strftime("%d.%m.%Y %H:%M")}_\n"
-            f"завершён: _{completed_time.strftime("%d.%m.%Y %H:%M")}_\n\n"
+            f"оформлен: _{ordered_time.strftime('%d.%m.%Y %H:%M')}_\n"
+            f"принят: _{accepted_time.strftime('%d.%m.%Y %H:%M')}_\n"
+            f"завершён: _{completed_time.strftime('%d.%m.%Y %H:%M')}_\n\n"
         )
 
         async for part in parts:
