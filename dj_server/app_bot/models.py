@@ -31,6 +31,11 @@ class User(models.Model):
 
 
 class Part(models.Model):
+
+    def wrapper(instance, filename):
+        ext = filename.split(".")[-1].lower()
+        return f"{instance.category}/{instance.name}.{ext}"
+
     part_id = models.BigAutoField(primary_key=True, verbose_name="ID товара")
     is_available = models.BooleanField(default=True, verbose_name="доступен в каталоге?")
     name = models.CharField(max_length=64, default="", verbose_name="имя")
@@ -38,8 +43,8 @@ class Part(models.Model):
     description = models.TextField(max_length=256, default="", verbose_name="описание")
     price = models.FloatField(default=0.0, verbose_name="цена")
     available_count = models.PositiveIntegerField(default=0, verbose_name="доступное количество")
-    image = models.FileField(
-        upload_to="img/parts",
+    image = models.ImageField(
+        upload_to=wrapper,
         default="img/static/no_img_part.jpg",
         verbose_name="фото"
     )

@@ -253,13 +253,22 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("✅ готово", callback_data=str(top_states["START"]))]
             )
 
-            await models.User.objects.aupdate_or_create(
-                user_id=user_id,
-                username=tg_username,
-                name=user_name,
-                phone_number=user_phone_number,
-                delivery_address=user_delivery_address
-            )
+            if await models.User.objects.filter(user_id=user_id).aexists():
+                await models.User.objects.aupdate(
+                    user_id=user_id,
+                    username=tg_username,
+                    name=user_name,
+                    phone_number=user_phone_number,
+                    delivery_address=user_delivery_address
+                )
+            else:
+                await models.User.objects.acreate(
+                    user_id=user_id,
+                    username=tg_username,
+                    name=user_name,
+                    phone_number=user_phone_number,
+                    delivery_address=user_delivery_address
+                )
 
     else:
         text = (
