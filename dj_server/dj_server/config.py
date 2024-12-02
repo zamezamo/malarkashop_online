@@ -2,14 +2,28 @@ from datetime import timedelta
 
 TZ_OFFSET = timedelta(hours=3)
 
-TITLE = 'AutoCosmeticsStore'
-CHANNEL_LINK="tg://resolve?domain=autocosmeticsstore_bot"
+TITLE = 'MalarkaShop'
+CHANNEL_LINK="tg://resolve?domain=malarkashop_bot"
 
-# Define bot configuration constants
-URL = "https://623d-178-124-178-90.ngrok-free.app"
-ADMIN_CHAT_ID = 542399495 # @zamezamo
-PORT = 8000
-TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # KEEP IT IN SECRET!
+
+"""CHOICES FOR CERTAIN PARTS CATEGORY"""
+
+CATEGORY_CHOICES = {
+    "ABRSMATS": "🛠 абразивные материалы",
+    "POLWHEEL": "🛠 полировальные круги",
+    "PNTTAPES": "🛠 малярные ленты",
+    "PLANES": "🛠 рубанки",
+    "POLPASTS": "🛠 полировальные пасты",
+    "SPRAYGUN": "🛠 краскопульты",
+    "SUPPLIES": "🛠 расходные материалы",
+    "OTHER": "🛠 другое"
+}
+
+
+"""
+    TEXT PLACEOLDERS
+    START
+"""
 
 ADMIN_PANEL_TEXT = (
     f"*{TITLE}*\n"
@@ -44,7 +58,7 @@ ENTER_USER_PHONE_NUMBER_TEXT = (
 )
 
 ENTER_USER_DELIVERY_ADDRESS_TEXT = (
-    f"адрес доставки? (макс. 64 симв.)"
+    f"адрес доставки? (макс. 128 симв.)"
 )
 
 PART_DELETED_FROM_CATALOG_ERROR_TEXT = (
@@ -87,13 +101,7 @@ COMPLETED_ORDERS_TEXT = (
     f"*[✅ архив заказов]*\n\n\n"
 )
 
-CATEGORY_CHOICES = {
-    "ABRSMATS": "🛠 абразивные материалы",
-    "POLWHEEL": "🛠 полировальные круги",
-    "PNTTAPES": "🛠 малярные ленты",
-    "PLANES": "🛠 рубанки",
-    "POLPASTS": "🛠 полировальные пасты",
-    "SPRAYGUN": "🛠 краскопульты",
-    "SUPPLIES": "🛠 расходные материалы",
-    "OTHER": "🛠 другое"
-}
+"""
+    TEXT PLACEOLDERS
+    END
+"""

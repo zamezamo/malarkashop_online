@@ -27,7 +27,9 @@ from telegram.ext import (
 )
 
 import app_bot.models as models
+
 import dj_server.config as CONFIG
+from dj_server.credentials import TOKEN, URL, PORT
 
 # Enable logging
 logging.basicConfig(
@@ -157,14 +159,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if bool(query):
         text = (
             f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*\n\n"
+            f"приветствуем, *{await sync_to_async(lambda: user.name)()}!*\n\n"
             f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
             f"описание\nописание\nописание\nописание\n"
         )
 
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{CONFIG.URL}/static/img/bot/logo.jpg",
+                media=f"{URL}/static/img/bot/logo.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -182,7 +184,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_photo(
-            photo=f"{CONFIG.URL}/static/img/bot/logo.jpg",
+            photo=f"{URL}/static/img/bot/logo.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -298,7 +300,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("msg_id") == None and callback == None:
         await update.message.reply_photo(
-            photo=f"{CONFIG.URL}/static/img/bot/user_profile_edit.jpg",
+            photo=f"{URL}/static/img/bot/user_profile_edit.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -314,7 +316,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=update.effective_chat.id,
             message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
-                media=f"{CONFIG.URL}/static/img/bot/user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -471,7 +473,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if callback is None:
         await update.message.reply_photo(
-                photo=f"{CONFIG.URL}/static/img/bot/admin_panel.jpg",
+                photo=f"{URL}/static/img/bot/admin_panel.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
@@ -696,7 +698,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{CONFIG.URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -800,7 +802,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{CONFIG.URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -902,7 +904,7 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{CONFIG.URL}/static/img/bot/completed_orders.jpg",
+                media=f"{URL}/static/img/bot/completed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -940,7 +942,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{CONFIG.URL}/static/img/bot/in_catalog.jpg",
+            media=f"{URL}/static/img/bot/in_catalog.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -965,7 +967,7 @@ async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
+            media=f"{URL}/static/img/bot/cart.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -1427,7 +1429,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try: # ingnore telegram.error.BadRequest: Message on the same message
             await query.edit_message_media(
                     media=InputMediaPhoto(
-                        media=f"{CONFIG.URL}/static/img/bot/cart.jpg",
+                        media=f"{URL}/static/img/bot/cart.jpg",
                         caption=text,
                         parse_mode=ParseMode.MARKDOWN,
                     ),
@@ -1442,7 +1444,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Set up PTB application and a web application for handling the incoming requests.
 context_types = ContextTypes(context=CallbackContext)
 ptb_application = (
-    Application.builder().token(CONFIG.TOKEN).updater(None).context_types(context_types).build()
+    Application.builder().token(TOKEN).updater(None).context_types(context_types).build()
 )
 
 
@@ -1627,8 +1629,8 @@ ptb_application.add_handler(
                 MessageHandler(~filters.Regex("^[0-9]{9}$"), delete_last_msg)
             ],
             user_profile_edit_states["GET_DELIVERY_ADDRESS"]: [
-                MessageHandler(filters.Regex("^[0-9а-яёА-Я/,. ]{2,64}$"), get_delivery_address),
-                MessageHandler(~filters.Regex("^[0-9а-яёА-Я/,. ]{2,64}$"), delete_last_msg)
+                MessageHandler(filters.Regex("^[0-9а-яёА-Я/,. ]{2,128}$"), get_delivery_address),
+                MessageHandler(~filters.Regex("^[0-9а-яёА-Я/,. ]{2,128}$"), delete_last_msg)
             ],
 
             
@@ -1682,14 +1684,14 @@ async def main() -> None:
     webserver = uvicorn.Server(
         config=uvicorn.Config(
             app=application,
-            port=CONFIG.PORT,
+            port=PORT,
             use_colors=False,
             host="127.0.0.1",
         )
     )
 
     # Pass webhook settings to telegram
-    await ptb_application.bot.set_webhook(url=f"{CONFIG.URL}/telegram", allowed_updates=Update.ALL_TYPES)
+    await ptb_application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
 
     # Run application and webserver together
     async with ptb_application:
