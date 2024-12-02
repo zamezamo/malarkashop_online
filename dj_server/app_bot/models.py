@@ -20,10 +20,10 @@ class User(models.Model):
     username = models.CharField(max_length=64, default="", verbose_name="username пользователя в тг")
     name = models.CharField(max_length=32, default="", verbose_name="имя пользователя")
     phone_number = models.CharField(max_length=9, default="", verbose_name="моб. номер")
-    delivery_address = models.CharField(max_length=64, default="", verbose_name="адрес доставки")
+    delivery_address = models.CharField(max_length=128, default="", verbose_name="адрес доставки")
 
     def __str__(self):
-        return f"{self.name}, @{self.username}, {self.phone_number}"
+        return f"{self.name}, @{self.username}, +375{self.phone_number}"
 
     class Meta:
         verbose_name = "пользователь"
