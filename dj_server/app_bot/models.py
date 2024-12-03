@@ -7,46 +7,87 @@ from dj_server.config import CATEGORY_CHOICES
 # Create your models here.
 
 class Admin(models.Model):
-    admin_id = models.BigIntegerField(primary_key=True)
-    is_notification_enabled = models.BooleanField(default=True)
+    admin_id = models.BigIntegerField(primary_key=True, verbose_name="ID админа в тг")
+    is_notification_enabled = models.BooleanField(default=True, verbose_name="уведомления включены?")
+
+    class Meta:
+        verbose_name = "админ"
+        verbose_name_plural = "админы"
+
 
 class User(models.Model):
-    user_id = models.BigIntegerField(primary_key=True)
-    username = models.CharField(max_length=64, default="")
+    user_id = models.BigIntegerField(primary_key=True, verbose_name="ID пользователя в тг")
+    username = models.CharField(max_length=64, default="", verbose_name="username пользователя в тг")
+    name = models.CharField(max_length=32, default="", verbose_name="имя пользователя")
+    phone_number = models.CharField(max_length=9, default="", verbose_name="моб. номер")
+    delivery_address = models.CharField(max_length=128, default="", verbose_name="адрес доставки")
+
+    def __str__(self):
+        return f"{self.name}, @{self.username}, +375{self.phone_number}"
+
+    class Meta:
+        verbose_name = "пользователь"
+        verbose_name_plural = "пользователи"
+
 
 class Part(models.Model):
-    part_id = models.BigAutoField(primary_key=True)
-    is_available = models.BooleanField(default=True)
-    name = models.CharField(max_length=64, default="")
-    category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER")
-    description = models.TextField(max_length=256, default="")
-    price = models.FloatField(default=0.0)
-    available_count = models.PositiveIntegerField(default=0)
-    image = models.FileField(
-        upload_to="img/parts",
-        default="img/static/no_img_part.jpg"
+
+    def wrapper(instance, filename):
+        ext = filename.split(".")[-1].lower()
+        return f"{instance.category}/{instance.name}.{ext}"
+
+    part_id = models.BigAutoField(primary_key=True, verbose_name="ID товара")
+    is_available = models.BooleanField(default=True, verbose_name="доступен в каталоге?")
+    name = models.CharField(max_length=64, default="", verbose_name="имя")
+    category = models.CharField(max_length=8, choices=CATEGORY_CHOICES, default="OTHER", verbose_name="категория")
+    description = models.TextField(max_length=256, default="", verbose_name="описание")
+    price = models.FloatField(default=0.0, verbose_name="цена")
+    available_count = models.PositiveIntegerField(default=0, verbose_name="доступное количество")
+    image = models.ImageField(
+        upload_to=wrapper,
+        default="img/static/no_img_part.jpg",
+        verbose_name="фото"
     )
+
+    class Meta:
+        verbose_name = "товар"
+        verbose_name_plural = "товары"
     
+
 class Order(models.Model):
-    order_id = models.BigAutoField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    parts = models.JSONField(default=dict)
-    cost = models.FloatField(default=0.0)
+    order_id = models.BigAutoField(primary_key=True, verbose_name="номер заказа")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="ID пользователя в тг")
+    parts = models.JSONField(default=dict, verbose_name="товары в корзине")
+    cost = models.FloatField(default=0.0, verbose_name="стоимость корзины")
+
+    class Meta:
+        verbose_name = "заказ в корзине"
+        verbose_name_plural = "заказы в корзине"
+
 
 class ConfirmedOrder(models.Model):
-    order_id = models.BigIntegerField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    parts = models.JSONField(default=dict)
-    cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
-    is_accepted = models.BooleanField(default=False)
-    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    order_id = models.BigIntegerField(primary_key=True, verbose_name="номер заказа")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="ID пользователя в тг")
+    parts = models.JSONField(default=dict, verbose_name="товары в заказе")
+    cost = models.FloatField(default=0.0, verbose_name="стоимость заказа")
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc), verbose_name="время оформления")
+    is_accepted = models.BooleanField(default=False, verbose_name="заказ принят?")
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc), verbose_name="время принятия")
+
+    class Meta:
+        verbose_name = "выполняемый заказ"
+        verbose_name_plural = "выполняемые заказы"
+
 
 class CompletedOrder(models.Model):
-    order_id = models.BigIntegerField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    parts = models.JSONField(default=dict)
-    cost = models.FloatField(default=0.0)
-    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
-    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
-    completed_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc))
+    order_id = models.BigIntegerField(primary_key=True, verbose_name="номер заказа")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="ID пользователя в тг")
+    parts = models.JSONField(default=dict, verbose_name="товары в заказе")
+    cost = models.FloatField(default=0.0, verbose_name="стоимость заказа")
+    ordered_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc), verbose_name="время оформления")
+    accepted_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc), verbose_name="время принятия")
+    completed_time = models.DateTimeField(default=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc), verbose_name="время доставки")
+
+    class Meta:
+        verbose_name = "доставленный заказ"
+        verbose_name_plural = "доставленные заказы"

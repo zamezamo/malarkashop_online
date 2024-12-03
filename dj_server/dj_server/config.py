@@ -2,30 +2,28 @@ from datetime import timedelta
 
 TZ_OFFSET = timedelta(hours=3)
 
-TITLE = 'AutoCustomersStore'
-BOT_LINK="tg://resolve?domain=autocosmeticsstore_bot"
+TITLE = 'MalarkaShop'
+CHANNEL_LINK="tg://resolve?domain=malarkashop_bot"
 
-# Define bot configuration constants
-URL = "https://3ced-178-127-82-21.ngrok-free.app"
-ADMIN_CHAT_ID = 542399495 # @zamezamo
-PORT = 8000
-TOKEN = "7000362389:AAFGsZk51Japmkc_U6cXqmHM3IFOPo8eCI0"  # KEEP IT IN SECRET!
 
-START_TEXT = (
-    f"Добро пожаловать в *{TITLE}*!\n"
-    f"Подписывайтесь на наш [канал]({BOT_LINK})!\n"
-    f"\n"
-    f"описание\nописание\nописание\nописание\n"
-    f"\n"
-)
+"""CHOICES FOR CERTAIN PARTS CATEGORY"""
 
-START_OVER_TEXT = (
-    f"*{TITLE}*\n"
-    f"Подписывайтесь на наш [канал]({BOT_LINK})!\n"
-    f"\n"
-    f"описание\nописание\nописание\nописание\n"
-    f"\n"
-)
+CATEGORY_CHOICES = {
+    "ABRSMATS": "🛠 абразивные материалы",
+    "POLWHEEL": "🛠 полировальные круги",
+    "PNTTAPES": "🛠 малярные ленты",
+    "PLANES": "🛠 рубанки",
+    "POLPASTS": "🛠 полировальные пасты",
+    "SPRAYGUN": "🛠 краскопульты",
+    "SUPPLIES": "🛠 расходные материалы",
+    "OTHER": "🛠 другое"
+}
+
+
+"""
+    TEXT PLACEOLDERS
+    START
+"""
 
 ADMIN_PANEL_TEXT = (
     f"*{TITLE}*\n"
@@ -46,8 +44,22 @@ EMPTY_TEXT = (
 )
 
 ENTER_PARTS_COUNT_TEXT = (
-    f"введи количество товара, которое хочешь добавить в корзину\n\n"
+    f"введите количество товара, которое хотите добавить в корзину\n\n"
     f"*0* - _удалить из корзины_"
+)
+
+ENTER_USER_NAME_TEXT = (
+    f"как к вам обращаться? (макс. 32 симв.)"
+)
+
+ENTER_USER_PHONE_NUMBER_TEXT = (
+    f"ваш телефон?\n"
+    f"в следующем формате: _(25, 29, 33, 44)xxxxxxx_"
+    f"(9 цифр после +375)"
+)
+
+ENTER_USER_DELIVERY_ADDRESS_TEXT = (
+    f"адрес доставки? (макс. 128 симв.)"
 )
 
 PART_DELETED_FROM_CATALOG_ERROR_TEXT = (
@@ -90,13 +102,7 @@ COMPLETED_ORDERS_TEXT = (
     f"*[✅ архив заказов]*\n\n\n"
 )
 
-CATEGORY_CHOICES = {
-    "ABRSMATS": "🛠 абразивные материалы",
-    "POLWHEEL": "🛠 полировальные круги",
-    "PNTTAPES": "🛠 малярные ленты",
-    "PLANES": "🛠 рубанки",
-    "POLPASTS": "🛠 полировальные пасты",
-    "SPRAYGUN": "🛠 краскопульты",
-    "SUPPLIES": "🛠 расходные материалы",
-    "OTHER": "🛠 другое"
-}
+"""
+    TEXT PLACEOLDERS
+    END
+"""
