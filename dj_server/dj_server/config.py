@@ -54,7 +54,8 @@ ENTER_USER_NAME_TEXT = (
 
 ENTER_USER_PHONE_NUMBER_TEXT = (
     f"ваш телефон?\n"
-    f"в следующем формате: _(25, 29, 33, 44)xxxxxxx_ (9 цифр после +375)"
+    f"в следующем формате: _(25, 29, 33, 44)xxxxxxx_"
+    f"(9 цифр после +375)"
 )
 
 ENTER_USER_DELIVERY_ADDRESS_TEXT = (
