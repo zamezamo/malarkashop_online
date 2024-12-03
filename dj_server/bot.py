@@ -98,7 +98,8 @@ product_card_states = {
 
 into_cart_states = {
     "MAKE_ORDER": 8_0,
-    "CONFIRM_ORDER": 8_1
+    "CONFIRM_ORDER": 8_1,
+    "EMPTY_CART": 8_2
 }
 
 
@@ -315,9 +316,12 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
     elif callback == str(top_states["USER_PROFILE_EDIT"]):
-        await query.edit_message_caption(
-            caption=text,
-            parse_mode=ParseMode.MARKDOWN,
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+            ),
             reply_markup=reply_markup
         )
     else:
@@ -425,15 +429,10 @@ async def get_delivery_address(update: Update, context: ContextTypes.DEFAULT_TYP
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     "Admin panel"
 
-    callback = None
+    query = update.callback_query
+    await query.answer()
 
-    if update.callback_query is not None:
-        query = update.callback_query
-        await query.answer()
-
-        callback = query.data
-    else:
-        await delete_last_msg(update)
+    callback = query.data
 
     text = CONFIG.ADMIN_PANEL_TEXT
 
@@ -480,22 +479,17 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if callback is None:
-        await update.message.reply_photo(
-                photo=f"{URL}/static/img/bot/admin_panel.jpg",
+    try: # ingnore telegram.error.BadRequest: Message on the same message
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=f"{URL}/static/img/bot/admin_panel.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=reply_markup
-            )
-    else:
-        try: # ingnore telegram.error.BadRequest: Message on the same message
-            await query.edit_message_caption(
-                caption=text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except:
-            pass
+            ),
+            reply_markup=reply_markup
+        )
+    except:
+        pass
 
     return top_states["ADMIN_PANEL"]
 
@@ -549,14 +543,14 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             async for part in parts:
                 count = order.parts[str(part.part_id)]
                 price = part.price
-                cost = count * price
+                cost = round(count * price, 2)
 
                 text_to_user += (
                     f"● *{part.name}*\n"
-                    f"{count}шт.x{price}р.= _{cost}р._\n"
+                    f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
-            text_to_user += f"\nстоимость: _{order.cost}р._"
+            text_to_user += f"\n💵 стоимость: _{order.cost}р._"
 
             await context.bot.send_message(
                 chat_id=await sync_to_async(lambda: order.user.user_id)(),
@@ -639,14 +633,14 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
         async for part in parts:
             count = order.parts[str(part.part_id)]
             price = part.price
-            cost = count * price
+            cost = round(count * price, 2)
 
             text += (
                 f"● *{part.name}*, id: *{part.part_id}*\n"
-                f"{count}шт.x{price}р.= _{cost}р._\n"
+                f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
-        text += f"\nстоимость: _{order.cost}р._\n\n"
+        text += f"\n💵 стоимость: _{order.cost}р._\n\n"
 
         if callback == str(all_confirmed_order_states["CANCEL_ORDER"]):
             text += f"🗑 *заказ отменён и удалён у пользователя*"
@@ -781,14 +775,14 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         async for part in parts:
             count = order.parts[str(part.part_id)]
             price = part.price
-            cost = count * price
+            cost = round(count * price, 2)
 
             text += (
                 f"● *{part.name}*\n"
-                f"{count}шт.x{price}р.= _{cost}р._\n"
+                f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
-        text += f"\nстоимость: _{order.cost}р._"
+        text += f"\n💵 стоимость: _{order.cost}р._"
 
         keyboard = [
             [
@@ -883,14 +877,14 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         async for part in parts:
             count = order.parts[str(part.part_id)]
             price = part.price
-            cost = count * price
+            cost = round(count * price, 2)
 
             text += (
                 f"● *{part.name}*\n"
-                f"{count}шт.x{price}р.= _{cost}р._\n"
+                f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
-        text += f"\nстоимость: _{order.cost}р._"
+        text += f"\n💵 стоимость: _{order.cost}р._"
 
         keyboard = [
             [
@@ -976,7 +970,7 @@ async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/cart.jpg",
+            media=f"{URL}/static/img/bot/in_catalog.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -1131,9 +1125,10 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if str(part.part_id) in order.parts:
         count = order.parts[str(part.part_id)]
+        cost = round(count * part.price, 2)
         text += (
             f"\nв корзине: *{count}шт.*\n"
-            f"на *{count * part.price}р.*\n"
+            f"на *{cost}р.*\n"
         )
 
     if part_deleted_from_catalog:
@@ -1269,14 +1264,14 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
     async for part in parts:
         count = order.parts[str(part.part_id)]
         price = part.price
-        cost = count * price
+        cost = round(count * price, 2)
 
         text_to_admin += (
             f"● *{part.name}*, id: *{part.part_id}*\n"
-            f"{count}шт.x{price}р.= _{cost}р._\n"
+            f"{count}шт. x {price}р.= _{cost}р._\n"
         )
 
-    text_to_admin += f"\nстоимость: _{order.cost}р._"
+    text_to_admin += f"\n💵 стоимость: _{order.cost}р._"
     
     admins_with_notifications_enabled = models.Admin.objects.filter(is_notification_enabled=True)
 
@@ -1301,6 +1296,8 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order = await models.Order.objects.aget(order_id=order_id)
     order.cost = 0
 
+    user = await models.User.objects.aget(user_id=update.effective_chat.id)
+
     text = CONFIG.INTO_CART_TEXT
     reply_markup = None
 
@@ -1313,20 +1310,31 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             async for part in parts:
                 count = order.parts[str(part.part_id)]
                 price = part.price
-                cost = count * price
+                cost = round(count * price, 2)
                 text += (
                     f"● *{part.name}*\n"
-                    f"{count}шт.x{price}р.= _{cost}р._\n"
+                    f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
                 order.cost += cost
 
             text += (
-                f"\n*итого:* _{order.cost}р._\n"
+                f"\n💵 *итого:* _{order.cost}р._\n"
+            )
+
+            text += (
+                f"\n_данные для доставки_\n"
+                f"👤 *ваше имя*: _{user.name}_\n"
+                f"📞 *телефон*: _+375{user.phone_number}_\n"
+                f"📍 *адрес доставки*: _{user.delivery_address}_\n"
+                f"(при необходимости можно изменить в профиле)\n"
             )
 
             keyboard = [
                 [
                     InlineKeyboardButton("📦 оформить заказ", callback_data=str(into_cart_states["MAKE_ORDER"]))
+                ],
+                [
+                    InlineKeyboardButton("🗑 очистить корзину", callback_data=str(into_cart_states["EMPTY_CART"]))
                 ],
                 [
                     InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
@@ -1338,16 +1346,24 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             async for part in parts:
                 count = order.parts[str(part.part_id)]
                 price = part.price
-                cost = count * price
+                cost = round(count * price, 2)
                 text += (
                     f"● *{part.name}*\n"
-                    f"{count}шт.x{price}р.= _{cost}р._\n"
+                    f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
                 order.cost += cost
 
             text += (
-                f"\n*итого:* _{order.cost}р._\n"
+                f"\n💵 *итого:* _{order.cost}р._\n"
+            )
+
+            text += (
+                f"\n_данные для доставки_\n"
+                f"👤 *ваше имя*: _{user.name}_\n"
+                f"📞 *телефон*: _+375{user.phone_number}_\n"
+                f"📍 *адрес доставки*: _{user.delivery_address}_\n"
+                f"(при необходимости можно изменить в профиле)\n"
             )
 
             text += CONFIG.ORDER_CONFIRMATION_TEXT
@@ -1382,12 +1398,12 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     count = order.parts[str(part_id)]
                     price = part.price
-                    cost = count * price
+                    cost = round(count * price, 2)
 
                     if order.parts[str(part_id)] > part.available_count:
                         text += (
                             f"● *{part.name}*\n"
-                            f"{count}шт.x{price}р.= _{cost}р._\n"
+                            f"{count}шт. x {price}р.= _{cost}р._\n"
                             f"_[выст. макс. дост. кол-во]_,\n"
                         )
 
@@ -1396,12 +1412,12 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     else:
                         text += (
                             f"● *{part.name}*\n"
-                            f"{count}шт.x{price}р.= _{cost}р._\n"
+                            f"{count}шт. x {price}р.= _{cost}р._\n"
                         )
                         order.cost += cost
 
             text += (
-                f"\n*итого:* _{order.cost}р._\n"
+                f"\n💵 *итого:* _{order.cost}р._\n"
             )
 
             if len(parts_id_deleted_from_catalog) or len(parts_id_not_enough_available_count):   
@@ -1418,6 +1434,18 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await confirm_order_to_db(update, context, order)
                 return top_states["END"]
+
+        if callback == str(into_cart_states["EMPTY_CART"]):
+
+            await models.Order.objects.filter(order_id=order_id).aupdate(parts={})
+
+            text += CONFIG.EMPTY_TEXT
+            keyboard = [   
+                [
+                    InlineKeyboardButton("↩️ в начало", callback_data=str(top_states["START"]))
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
     else:
         text += CONFIG.EMPTY_TEXT
@@ -1593,6 +1621,10 @@ ptb_application.add_handler(
                 CallbackQueryHandler(
                     into_cart,
                     pattern="^" + str(into_cart_states["CONFIRM_ORDER"]) + "$"
+                ),
+                CallbackQueryHandler(
+                    into_cart,
+                    pattern="^" + str(into_cart_states["EMPTY_CART"]) + "$"
                 )
             ],
 
