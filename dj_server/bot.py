@@ -167,7 +167,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/logo.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -185,7 +185,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/logo.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -255,8 +255,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             if await models.User.objects.filter(user_id=user_id).aexists():
-                await models.User.objects.aupdate(
-                    user_id=user_id,
+                await models.User.objects.filter(user_id=user_id).aupdate(
                     username=tg_username,
                     name=user_name,
                     phone_number=user_phone_number,
@@ -310,7 +309,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("msg_id") == None and callback == None:
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/user_profile_edit.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -318,7 +317,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback == str(top_states["USER_PROFILE_EDIT"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -329,7 +328,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=update.effective_chat.id,
             message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -482,7 +481,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: # ingnore telegram.error.BadRequest: Message on the same message
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/admin_panel.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_admin_panel.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -542,6 +541,9 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
             async for part in parts:
                 count = order.parts[str(part.part_id)]
+
+                await models.Part.objects.filter(part_id=part.part_id).aupdate(available_count=part.available_count+count, is_available=True)
+
                 price = part.price
                 cost = round(count * price, 2)
 
@@ -701,7 +703,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -805,7 +807,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -907,7 +909,7 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/completed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_completed_orders.jpg",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -945,7 +947,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -970,7 +972,7 @@ async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -1456,24 +1458,21 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_caption(
+    if callback == str(top_states["INTO_CART"]):
+        await query.edit_message_media(
+                media=InputMediaPhoto(
+                    media=f"{URL}/static/img/bot/malarka_shop_bot_cart.jpg",
+                    caption=text,
+                    parse_mode=ParseMode.MARKDOWN,
+                ),
+                reply_markup=reply_markup
+            )
+    else:
+        await query.edit_message_caption(
             caption=text,
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
         )
-
-    if callback == str(top_states["INTO_CART"]):
-        try: # ingnore telegram.error.BadRequest: Message on the same message
-            await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=f"{URL}/static/img/bot/cart.jpg",
-                        caption=text,
-                        parse_mode=ParseMode.MARKDOWN,
-                    ),
-                    reply_markup=reply_markup
-                )
-        except:
-            pass
         
     return top_states["INTO_CART"]
 
