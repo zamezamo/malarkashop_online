@@ -160,7 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if bool(query):
         text = (
             f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}!*\n\n"
+            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*!\n\n"
             f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
             f"описание\nописание\nописание\nописание\n"
         )
@@ -297,8 +297,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📍 *адрес доставки*: _{user.delivery_address}_\n"
         )
 
-        await models.User.objects.aupdate(
-                user_id=user_id,
+        await models.User.objects.filter(user_id=user_id).aupdate(
                 username=tg_username,
                 name=user.name,
                 phone_number=user.phone_number,
