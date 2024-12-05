@@ -13,7 +13,16 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 
-from dj_server.credentials import URL, DB_PASSWORD, DB_USER
+from dj_server.credentials import (
+    URL,
+
+    DB_NAME,
+    DB_USER,
+    DB_PASSWORD,
+
+    STATIC_ROOT,
+    MEDIA_ROOT
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,10 +87,11 @@ WSGI_APPLICATION = 'dj_server.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# set it in credentials.py
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'store',
+        'NAME': DB_NAME,
         'USER': DB_USER,
         'PASSWORD': DB_PASSWORD,
         'HOST': 'localhost',
@@ -126,24 +136,25 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(
-    BASE_DIR / "app_bot", "static"
-)
+# set it in credentials.py
+if STATIC_ROOT == None:
+    STATIC_ROOT = os.path.join(
+        BASE_DIR / "app_bot", "static"
+    )
 
-STATICFILES_DIRS = [
-
-]
-
-MEDIA_ROOT = (
-    os.path.join(BASE_DIR / "app_bot", 'uploads')
-)
 MEDIA_URL = 'uploads/'
+# set it in credentials.py
+if MEDIA_ROOT == None:
+    MEDIA_ROOT = os.path.join(
+        BASE_DIR / "app_bot", 'uploads'
+    )
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# set it in credentials.py
 CSRF_TRUSTED_ORIGINS = [
     URL,
     "http://localhost:8000",

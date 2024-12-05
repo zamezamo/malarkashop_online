@@ -34,7 +34,7 @@ class Part(models.Model):
 
     def wrapper(instance, filename):
         ext = filename.split(".")[-1].lower()
-        return f"{instance.category}/{instance.name}.{ext}"
+        return f"img/parts/{instance.category}/{instance.name}.{ext}"
 
     part_id = models.BigAutoField(primary_key=True, verbose_name="ID товара")
     is_available = models.BooleanField(default=True, verbose_name="доступен в каталоге?")
