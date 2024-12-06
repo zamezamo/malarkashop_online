@@ -128,6 +128,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     order, _ = await models.Order.objects.aget_or_create(user=user)
 
+    text = (
+        f"*{CONFIG.TITLE}*\n"
+        f"приветствуем, *{await sync_to_async(lambda: user.name)()}*!\n\n"
+        f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
+        f"описание\nописание\nописание\nописание\n"
+    )
+
     keyboard = [
         [
             InlineKeyboardButton("🛍 перейти в каталог", callback_data=str(top_states["CHOOSE_CATEGORY"]))
@@ -158,12 +165,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["order_id"] = order.order_id
 
     if bool(query):
-        text = (
-            f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*!\n\n"
-            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
-            f"описание\nописание\nописание\nописание\n"
-        )
 
         await query.edit_message_media(
             media=InputMediaPhoto(
@@ -176,13 +177,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         await delete_last_msg(update)
-
-        text = (
-            f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*\n\n"
-            f"описание\nописание\nописание\nописание\n\n"
-            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!"
-        )
 
         await update.message.reply_photo(
             photo=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg",

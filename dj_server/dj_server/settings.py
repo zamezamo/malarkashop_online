@@ -20,8 +20,8 @@ from dj_server.credentials import (
     DB_USER,
     DB_PASSWORD,
 
-    STATIC_ROOT,
-    MEDIA_ROOT
+    STATIC_ROOT_HOST,
+    MEDIA_ROOT_HOST
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -137,15 +137,15 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 # set it in credentials.py
-if STATIC_ROOT == None:
-    STATIC_ROOT = os.path.join(
+STATIC_ROOT = STATIC_ROOT_HOST if STATIC_ROOT_HOST else \
+    os.path.join(
         BASE_DIR / "app_bot", "static"
     )
 
 MEDIA_URL = 'uploads/'
 # set it in credentials.py
-if MEDIA_ROOT == None:
-    MEDIA_ROOT = os.path.join(
+MEDIA_ROOT = MEDIA_ROOT_HOST if MEDIA_ROOT_HOST else \
+    os.path.join(
         BASE_DIR / "app_bot", 'uploads'
     )
 
