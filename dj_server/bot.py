@@ -40,6 +40,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+TIMESTAMP_START = datetime.now().isoformat()
+
 SPLIT = "_"
 
 top_states = {
@@ -168,7 +170,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -179,7 +181,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await delete_last_msg(update)
 
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg?a={TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -302,7 +304,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("msg_id") == None and callback == None:
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -310,7 +312,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback == str(top_states["USER_PROFILE_EDIT"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -321,7 +323,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=update.effective_chat.id,
             message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -474,7 +476,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: # ingnore telegram.error.BadRequest: Message on the same message
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_admin_panel.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_admin_panel.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -696,7 +698,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -800,7 +802,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -902,7 +904,7 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_completed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_completed_orders.jpg?a={TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -940,7 +942,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg?a={TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -965,7 +967,7 @@ async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg?a={TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -1454,7 +1456,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if callback == str(top_states["INTO_CART"]):
         await query.edit_message_media(
                 media=InputMediaPhoto(
-                    media=f"{URL}/static/img/bot/malarka_shop_bot_cart.jpg",
+                    media=f"{URL}/static/img/bot/malarka_shop_bot_cart.jpg?a={TIMESTAMP_START}",
                     caption=text,
                     parse_mode=ParseMode.MARKDOWN,
                 ),
