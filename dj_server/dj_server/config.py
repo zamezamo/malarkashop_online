@@ -1,6 +1,8 @@
-from datetime import timedelta
+import datetime
 
-TZ_OFFSET = timedelta(hours=3)
+TZ_OFFSET = datetime.timedelta(hours=3)
+
+TIMESTAMP_START = int(datetime.datetime.now().timestamp())
 
 TITLE = 'MalarkaShop'
 CHANNEL_LINK="tg://resolve?domain=malarkashop_bot"

@@ -2,7 +2,7 @@ import datetime
 
 from django.db import models
 
-from dj_server.config import CATEGORY_CHOICES
+from dj_server.config import CATEGORY_CHOICES, TIMESTAMP_START
 
 # Create your models here.
 
@@ -32,9 +32,12 @@ class User(models.Model):
 
 class Part(models.Model):
 
-    def wrapper(instance, filename):
+    def wrapper_img_path(instance, filename):
         ext = filename.split(".")[-1].lower()
-        return f"img/parts/{instance.category}/{instance.name}.{ext}"
+        return f"img/parts/{datetime.datetime.now().strftime('%Y-%m-%d')}/part_{instance.category}_{instance.name}.{ext}"
+    
+    def wrapper_no_img_path():
+        return f"img/static/part_no_image.jpg"
 
     part_id = models.BigAutoField(primary_key=True, verbose_name="ID товара")
     is_available = models.BooleanField(default=True, verbose_name="доступен в каталоге?")
@@ -44,9 +47,10 @@ class Part(models.Model):
     price = models.FloatField(default=0.0, verbose_name="цена")
     available_count = models.PositiveIntegerField(default=0, verbose_name="доступное количество")
     image = models.ImageField(
-        upload_to=wrapper,
-        default="img/static/no_img_part.jpg",
-        verbose_name="фото"
+        upload_to=wrapper_img_path,
+        default=wrapper_no_img_path,
+        verbose_name="фото",
+        max_length=128
     )
 
     class Meta:
