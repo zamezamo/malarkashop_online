@@ -202,7 +202,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_username = update.effective_chat.username
 
     if tg_username is None:
-        tg_username = "@id_" + str(user_id)
+        tg_username = "id_" + str(user_id)
 
     user_name = context.user_data.get("user_name")
     user_phone_number = context.user_data.get("user_phone_number")
@@ -696,7 +696,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg?a={CONFIG.TIMESTAMP_START}",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_all_confirmed_orders.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
