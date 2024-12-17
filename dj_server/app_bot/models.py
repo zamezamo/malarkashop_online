@@ -23,7 +23,7 @@ class User(models.Model):
     delivery_address = models.CharField(max_length=128, default="", verbose_name="адрес доставки")
 
     def __str__(self):
-        return f"{self.name}, @{self.username}, +375{self.phone_number}"
+        return f"{self.name}, {self.username}, +375{self.phone_number}"
 
     class Meta:
         verbose_name = "пользователь"

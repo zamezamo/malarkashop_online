@@ -202,7 +202,9 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_username = update.effective_chat.username
 
     if tg_username is None:
-        tg_username = "id_" + str(user_id)
+        tg_username = "tgid-" + str(user_id)
+    else:
+        tg_username = "@" + tg_username
 
     user_name = context.user_data.get("user_name")
     user_phone_number = context.user_data.get("user_phone_number")
@@ -613,7 +615,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
 
         text += (
             f"- заказ *№{order.order_id}* -\n"
-            f"- от @{order_user.username} -\n\n"
+            f"- от {order_user.username} -\n\n"
             f"👤 *на имя*: _{order_user.name}_\n"
             f"📞 *телефон*: _+375{order_user.phone_number}_\n"
             f"📍 *адрес*: _{order_user.delivery_address}_\n\n"
@@ -1249,7 +1251,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     
     text_to_admin = (
-        f"🔔 поступил заказ *№{order.order_id}* от @{user.username}\n\n"
+        f"🔔 поступил заказ *№{order.order_id}* от {user.username}\n\n"
         f"👤 *на имя*: {user.name}\n"
         f"📞 *телефон*: +375{user.phone_number}\n"
         f"📍 *адрес*: {user.delivery_address}\n\n"
@@ -1277,7 +1279,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    logger.info(f"[PTB] Order #{order.order_id} from user @{user.username} confirmed")
+    logger.info(f"[PTB] Order #{order.order_id} from user {user.username} confirmed")
 
 
 async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
