@@ -21,7 +21,9 @@ from dj_server.credentials import (
     DB_PASSWORD,
 
     STATIC_ROOT_HOST,
-    MEDIA_ROOT_HOST
+    MEDIA_ROOT_HOST,
+
+    DJANGO_SECRET_KEY
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -32,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ovot)!0lvg8x9z+8u#ci(o9-oe!_7!iivu#%^@-k9j=##sio47'
+SECRET_KEY = DJANGO_SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -146,7 +148,7 @@ MEDIA_URL = 'uploads/'
 # set it in credentials.py
 MEDIA_ROOT = MEDIA_ROOT_HOST if MEDIA_ROOT_HOST else \
     os.path.join(
-        BASE_DIR / "app_bot", 'uploads'
+        BASE_DIR / "app_bot", "uploads"
     )
 
 # Default primary key field type
@@ -154,9 +156,8 @@ MEDIA_ROOT = MEDIA_ROOT_HOST if MEDIA_ROOT_HOST else \
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# set it in credentials.py
 CSRF_TRUSTED_ORIGINS = [
-    URL,
+    URL,    # set it in credentials.py
     "http://localhost:8000",
     "http://localhost:8888",
     "http://localhost",
