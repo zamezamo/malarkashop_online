@@ -1,5 +1,6 @@
 import datetime
 import shutil
+from PIL import Image
 
 from dj_server.config import DEFAULT_PART_IMAGE
 from dj_server.settings import MEDIA_ROOT
@@ -24,7 +25,8 @@ class UserArticle(admin.ModelAdmin):
 class PartArticle(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
-        file = obj.image.name.rsplit("/", 1)[-1]
+        load_name = obj.image.name
+        file = load_name.rsplit("/", 1)[-1]
         if file != DEFAULT_PART_IMAGE:
             fileext = file.split(".")[-1].lower()
             destination = f"img/parts/{datetime.datetime.now().strftime('%Y_%m_%d')}/part_{obj.category}_{obj.name}.{fileext}"
@@ -32,6 +34,10 @@ class PartArticle(admin.ModelAdmin):
                 shutil.copy(obj.image.path.replace("\\", "/"), MEDIA_ROOT.replace("\\", "/") + "/" + destination)
             obj.image.name = destination
         super().save_model(request, obj, form, change)
+        if (file != DEFAULT_PART_IMAGE) and ("/" not in load_name):
+            img = Image.open(obj.image.path)
+            img = img.resize((1920, 1080))
+            img.save(obj.image.path, quality=95)
 
     list_display = ['part_id', 'is_available', 'name', 'category', 'price', 'available_count']
 
