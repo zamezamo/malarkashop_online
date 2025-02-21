@@ -1767,16 +1767,16 @@ ptb_application.add_handler(
 
 
             user_profile_edit_states["GET_NAME"]: [
-                MessageHandler(filters.Regex("^[-а-яёА-Я ]{2,32}$"), get_name),
-                MessageHandler(~filters.Regex("^[-а-яёА-Я ]{2,32}$"), delete_last_msg)
+                MessageHandler(filters.Regex(".{1,64}"), get_name),
+                MessageHandler(~filters.Regex(".{1,64}"), delete_last_msg)
             ],
             user_profile_edit_states["GET_PHONE_NUMBER"]: [
                 MessageHandler(filters.Regex("^[0-9]{9}$"), get_phone_number),
                 MessageHandler(~filters.Regex("^[0-9]{9}$"), delete_last_msg)
             ],
             user_profile_edit_states["GET_DELIVERY_ADDRESS"]: [
-                MessageHandler(filters.Regex("^[-0-9а-яёА-Я/,. ]{2,128}$"), get_delivery_address),
-                MessageHandler(~filters.Regex("^[-0-9а-яёА-Я/,. ]{2,128}$"), delete_last_msg)
+                MessageHandler(filters.Regex(".{1,128}"), get_delivery_address),
+                MessageHandler(~filters.Regex(".{1,128}"), delete_last_msg)
             ],
 
             
