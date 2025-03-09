@@ -13,7 +13,18 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 
-from dj_server.credentials import URL, DB_PASSWORD, DB_USER
+from dj_server.credentials import (
+    URL,
+
+    DB_NAME,
+    DB_USER,
+    DB_PASSWORD,
+
+    STATIC_ROOT_HOST,
+    MEDIA_ROOT_HOST,
+
+    DJANGO_SECRET_KEY
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ovot)!0lvg8x9z+8u#ci(o9-oe!_7!iivu#%^@-k9j=##sio47'
+SECRET_KEY = DJANGO_SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -78,10 +89,11 @@ WSGI_APPLICATION = 'dj_server.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# set it in credentials.py
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'store',
+        'NAME': DB_NAME,
         'USER': DB_USER,
         'PASSWORD': DB_PASSWORD,
         'HOST': 'localhost',
@@ -126,18 +138,18 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(
-    BASE_DIR / "app_bot", "static"
-)
+# set it in credentials.py
+STATIC_ROOT = STATIC_ROOT_HOST if STATIC_ROOT_HOST else \
+    os.path.join(
+        BASE_DIR / "app_bot", "static"
+    )
 
-STATICFILES_DIRS = [
-
-]
-
-MEDIA_ROOT = (
-    os.path.join(BASE_DIR / "app_bot", 'uploads')
-)
 MEDIA_URL = 'uploads/'
+# set it in credentials.py
+MEDIA_ROOT = MEDIA_ROOT_HOST if MEDIA_ROOT_HOST else \
+    os.path.join(
+        BASE_DIR / "app_bot", "uploads"
+    )
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -145,7 +157,7 @@ MEDIA_URL = 'uploads/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CSRF_TRUSTED_ORIGINS = [
-    URL,
+    URL,    # set it in credentials.py
     "http://localhost:8000",
     "http://localhost:8888",
     "http://localhost",

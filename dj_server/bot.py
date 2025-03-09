@@ -33,7 +33,10 @@ from dj_server.credentials import TOKEN, URL, PORT
 
 # Enable logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename=f'{datetime.now().strftime('%Y-%m-%d')}.log',
+    level=logging.INFO,
+    encoding='utf-8'
 )
 # set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -116,17 +119,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
+    user = None
     user_id = update.effective_chat.id
+    tg_username = update.effective_chat.username
     try:
         user = await models.User.objects.aget(user_id=user_id)
     except:
         context.user_data["is_user_registration"] = True
 
-        await delete_last_msg(update)
         await user_profile_edit(update, context)
+        await delete_last_msg(update)
+
         return top_states["USER_PROFILE_EDIT"]
     
-    order, _ = await models.Order.objects.aget_or_create(user=user)
+    if (tg_username is not None) and (('@' + tg_username) != user.username):
+        await models.User.objects.filter(user_id=user_id).aupdate(username=tg_username)
+    
+    order = None
+    try:
+        order = await models.Order.objects.aget(user=user)
+    except:
+        order = await models.Order.objects.acreate(user=user)
+        logger.info(f"[PTB] Order [id: {order.order_id}] from user [{user}] created")
+
+    text = (
+        f"*{CONFIG.TITLE}*\n"
+        f"приветствуем, *{await sync_to_async(lambda: user.name)()}*!\n\n"
+        f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
+    )
 
     keyboard = [
         [
@@ -158,16 +178,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["order_id"] = order.order_id
 
     if bool(query):
-        text = (
-            f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}!*\n\n"
-            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
-            f"описание\nописание\nописание\nописание\n"
-        )
 
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/logo.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -177,15 +191,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await delete_last_msg(update)
 
-        text = (
-            f"*{CONFIG.TITLE}*\n"
-            f"приветствуем, *{await sync_to_async(lambda: user.name)()}*\n\n"
-            f"описание\nописание\nописание\nописание\n\n"
-            f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!"
-        )
-
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/logo.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_logo.jpg?a={CONFIG.TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -208,7 +215,9 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_username = update.effective_chat.username
 
     if tg_username is None:
-        tg_username = "@id_" + str(user_id)
+        tg_username = "tg-" + str(user_id)
+    else:
+        tg_username = "@" + tg_username
 
     user_name = context.user_data.get("user_name")
     user_phone_number = context.user_data.get("user_phone_number")
@@ -228,8 +237,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("is_user_registration"):
         text = (
-            f"Добро пожаловать в *{CONFIG.TITLE}*!\n\n"
-            f"описание\nописание\nописание\nописание\n"
+            f"добро пожаловать в *{CONFIG.TITLE}*!\n\n"
             f"подписывайтесь на наш [канал]({CONFIG.CHANNEL_LINK})!\n\n"
             f"📝 *регистрация пользователя*\n\n"
         )
@@ -255,13 +263,13 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             if await models.User.objects.filter(user_id=user_id).aexists():
-                await models.User.objects.aupdate(
-                    user_id=user_id,
+                await models.User.objects.filter(user_id=user_id).aupdate(
                     username=tg_username,
                     name=user_name,
                     phone_number=user_phone_number,
                     delivery_address=user_delivery_address
                 )
+                logger.info(f"[PTB] User [id: {user_id}, username: {tg_username}, name: {user_name}] updated")
             else:
                 await models.User.objects.acreate(
                     user_id=user_id,
@@ -270,6 +278,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     phone_number=user_phone_number,
                     delivery_address=user_delivery_address
                 )
+                logger.info(f"[PTB] User [id: {user_id}, username: {tg_username}, name: {user_name}] registered")
 
     else:
         text = (
@@ -298,8 +307,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📍 *адрес доставки*: _{user.delivery_address}_\n"
         )
 
-        await models.User.objects.aupdate(
-                user_id=user_id,
+        await models.User.objects.filter(user_id=user_id).aupdate(
                 username=tg_username,
                 name=user.name,
                 phone_number=user.phone_number,
@@ -310,7 +318,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("msg_id") == None and callback == None:
         await update.message.reply_photo(
-            photo=f"{URL}/static/img/bot/user_profile_edit.jpg",
+            photo=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={CONFIG.TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup
@@ -318,7 +326,7 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback == str(top_states["USER_PROFILE_EDIT"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -326,10 +334,10 @@ async def user_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await context.bot.edit_message_media(
-            chat_id=update.effective_chat.id,
+            chat_id=user_id,
             message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/user_profile_edit.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_user_profile_edit.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -345,7 +353,9 @@ async def ask_for_enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.ENTER_USER_NAME_TEXT
+    text = (
+        f"как к вам обращаться? (макс. 64 симв.)"
+    )
     
     await query.edit_message_caption(
         caption=text,
@@ -363,7 +373,11 @@ async def ask_for_enter_phone_number(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.ENTER_USER_PHONE_NUMBER_TEXT
+    text = (
+        f"ваш телефон?\n"
+        f"в следующем формате: _(25, 29, 33, 44)xxxxxxx_"
+        f"(9 цифр после +375)"
+    )
     
     await query.edit_message_caption(
         caption=text,
@@ -381,7 +395,9 @@ async def ask_for_enter_delivery_address(update: Update, context: ContextTypes.D
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.ENTER_USER_DELIVERY_ADDRESS_TEXT
+    text = (
+        f"адрес доставки? (макс. 128 симв.)"
+    )
     
     await query.edit_message_caption(
         caption=text,
@@ -434,9 +450,13 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     callback = query.data
 
-    text = CONFIG.ADMIN_PANEL_TEXT
+    text = (
+        f"*{CONFIG.TITLE}*\n"
+        f"*[admin панель]*\n"
+        f"_успешно авторизовано_\n\n\n"
+    )
 
-    admin = await models.Admin.objects.aget(admin_id=update.effective_chat.id)
+    admin = await models.Admin.objects.aget(admin_id=context.user_data.get("user_id"))
 
     if callback == str(admin_panel_states["NOTIFICATIONS_ON_OFF"]):
         admin.is_notification_enabled = not admin.is_notification_enabled
@@ -482,7 +502,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: # ingnore telegram.error.BadRequest: Message on the same message
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/admin_panel.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_admin_panel.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -504,7 +524,9 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     order = None
     order_id = context.user_data.get("all_confirmed_order_id")
 
-    text = CONFIG.ALL_CONFIRMED_ORDERS_TEXT
+    text = (
+        f"*[🕓 выполняемые заказы]*\n\n\n"
+    )
 
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         order = await models.ConfirmedOrder.objects.all().afirst()
@@ -531,29 +553,36 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(all_confirmed_order_states["CANCEL_ORDER"]):
         try:
             order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+            user = await sync_to_async(lambda: order.user)()
             
             await models.ConfirmedOrder.objects.filter(order_id=order_id).adelete()
+
+            logger.info(f"[PTB] Order [id: {order.order_id}] from user [{user}] canceled")
 
             text_to_user = (
                 f"🔔 ваш заказ *№{order.order_id}*   ❌  отменён\n\n"
                 f"_товары в заказе:_\n"
             )
 
-            parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
-            async for part in parts:
-                count = order.parts[str(part.part_id)]
-                price = part.price
+            for part_id in order.parts:
+                count = order.parts[part_id]['count']
+                price = order.parts[part_id]['price']
+                name = order.parts[part_id]['name']
+
+                part = await models.Part.objects.aget(part_id=part_id)
+                await models.Part.objects.filter(part_id=part_id).aupdate(available_count=part.available_count+count, is_available=True)
+
                 cost = round(count * price, 2)
 
                 text_to_user += (
-                    f"● *{part.name}*\n"
+                    f"● *{name}*\n"
                     f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
             text_to_user += f"\n💵 стоимость: _{order.cost}р._"
 
             await context.bot.send_message(
-                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                chat_id=user.user_id,
                 text=text_to_user,
                 parse_mode=ParseMode.MARKDOWN,
             )
@@ -563,6 +592,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(all_confirmed_order_states["ACCEPT_ORDER"]):
         try:
             order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+            user = await sync_to_async(lambda: order.user)()
 
             order.is_accepted = True
             order.accepted_time = datetime.now(timezone.utc)
@@ -572,10 +602,12 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
                 accepted_time = order.accepted_time
             )
 
+            logger.info(f"[PTB] Order [id: {order.order_id}] from user [{user}] applied")
+
             text_to_user = f"🔔 ваш заказ *№{order.order_id}*   📥  принят"
 
             await context.bot.send_message(
-                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                chat_id=user.user_id,
                 text=text_to_user,
                 parse_mode=ParseMode.MARKDOWN,
             )
@@ -585,10 +617,11 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(all_confirmed_order_states["COMPLETE_ORDER"]):
         try:
             order = await models.ConfirmedOrder.objects.aget(order_id=order_id)
+            user = await sync_to_async(lambda: order.user)()
             
             await models.CompletedOrder.objects.acreate(
                 order_id = order.order_id,
-                user = await sync_to_async(lambda: order.user)(),
+                user = user,
                 parts = order.parts,
                 cost = order.cost,
                 ordered_time = order.ordered_time,
@@ -598,10 +631,12 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
 
             await models.ConfirmedOrder.objects.filter(order_id=order_id).adelete()
 
+            logger.info(f"[PTB] Order [id: {order.order_id}] from user [{user}] completed")
+
             text_to_user = f"🔔 ваш заказ *№{order.order_id}*   ✅  завершён"
 
             await context.bot.send_message(
-                chat_id=await sync_to_async(lambda: order.user.user_id)(),
+                chat_id=user.user_id,
                 text=text_to_user,
                 parse_mode=ParseMode.MARKDOWN,
             )
@@ -609,8 +644,6 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
             order = None
 
     if order:
-        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
-
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
         accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
 
@@ -618,7 +651,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
 
         text += (
             f"- заказ *№{order.order_id}* -\n"
-            f"- от @{order_user.username} -\n\n"
+            f"- от {order_user.username} -\n\n"
             f"👤 *на имя*: _{order_user.name}_\n"
             f"📞 *телефон*: _+375{order_user.phone_number}_\n"
             f"📍 *адрес*: _{order_user.delivery_address}_\n\n"
@@ -630,13 +663,15 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
         else:
             text += f"*требует подтверждения* ❌\n\n"
 
-        async for part in parts:
-            count = order.parts[str(part.part_id)]
-            price = part.price
+        for part_id in order.parts:
+            count = order.parts[part_id]['count']
+            price = order.parts[part_id]['price']
+            name = order.parts[part_id]['name']
+
             cost = round(count * price, 2)
 
             text += (
-                f"● *{part.name}*, id: *{part.part_id}*\n"
+                f"● *{name}*, id: *{part_id}*\n"
                 f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
@@ -701,7 +736,7 @@ async def all_confirmed_order_list(update: Update, context: ContextTypes.DEFAULT
     if callback == str(admin_panel_states["ALL_CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_all_confirmed_orders.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -733,7 +768,9 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = context.user_data.get("user_id")
     user = await models.User.objects.aget(user_id=user_id)
 
-    text = CONFIG.CONFIRMED_ORDERS_TEXT
+    text = (
+        f"*[🕓 ваши заказы]*\n\n\n"
+    )
 
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         order = await models.ConfirmedOrder.objects.filter(user=user).afirst()
@@ -757,8 +794,6 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data["confirmed_order_id"] = order.order_id
 
     if order:
-        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
-
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
         accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
 
@@ -772,13 +807,15 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             text += f"принят: 🕓 _в обработке_\n\n"
 
-        async for part in parts:
-            count = order.parts[str(part.part_id)]
-            price = part.price
+        for part_id in order.parts:
+            count = order.parts[part_id]['count']
+            price = order.parts[part_id]['price']
+            name = order.parts[part_id]['name']
+
             cost = round(count * price, 2)
 
             text += (
-                f"● *{part.name}*\n"
+                f"● *{name}*\n"
                 f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
@@ -805,7 +842,7 @@ async def confirmed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["CONFIRMED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/confirmed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_confirmed_orders.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -837,7 +874,9 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = context.user_data.get("user_id")
     user = await models.User.objects.aget(user_id=user_id)
 
-    text = CONFIG.COMPLETED_ORDERS_TEXT
+    text = (
+        f"*[✅ архив заказов]*\n\n\n"
+    )
 
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
         order = await models.CompletedOrder.objects.filter(user=user).afirst()
@@ -861,8 +900,6 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data["completed_order_id"] = order.order_id
 
     if order:
-        parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
-
         ordered_time = order.ordered_time + CONFIG.TZ_OFFSET
         accepted_time = order.accepted_time + CONFIG.TZ_OFFSET
         completed_time = order.completed_time + CONFIG.TZ_OFFSET
@@ -874,13 +911,15 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
             f"завершён: _{completed_time.strftime('%d.%m.%Y %H:%M')}_\n\n"
         )
 
-        async for part in parts:
-            count = order.parts[str(part.part_id)]
-            price = part.price
+        for part_id in order.parts:
+            count = order.parts[part_id]['count']
+            price = order.parts[part_id]['price']
+            name = order.parts[part_id]['name']
+
             cost = round(count * price, 2)
 
             text += (
-                f"● *{part.name}*\n"
+                f"● *{name}*\n"
                 f"{count}шт. x {price}р.= _{cost}р._\n"
             )
 
@@ -907,7 +946,7 @@ async def completed_order_list(update: Update, context: ContextTypes.DEFAULT_TYP
     if callback == str(top_states["COMPLETED_ORDER_LIST"]):
         await query.edit_message_media(
             media=InputMediaPhoto(
-                media=f"{URL}/static/img/bot/completed_orders.jpg",
+                media=f"{URL}/static/img/bot/malarka_shop_bot_completed_orders.jpg?a={CONFIG.TIMESTAMP_START}",
                 caption=text,
                 parse_mode=ParseMode.MARKDOWN,
             ),
@@ -932,7 +971,9 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.CHOOSE_CATEGORY_TEXT
+    text = (
+        f"\n_выберите категорию товара ниже:_"
+    )
 
     keyboard = [
         [InlineKeyboardButton(button_name, callback_data=str(top_states["PRODUCT_CARDS"]) + SPLIT + category)] 
@@ -945,7 +986,7 @@ async def choose_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg?a={CONFIG.TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -970,7 +1011,7 @@ async def empty_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.callback_query.edit_message_media(
         media=InputMediaPhoto(
-            media=f"{URL}/static/img/bot/in_catalog.jpg",
+            media=f"{URL}/static/img/bot/malarka_shop_bot_in_catalog.jpg?a={CONFIG.TIMESTAMP_START}",
             caption=text,
             parse_mode=ParseMode.MARKDOWN,
         ),
@@ -994,7 +1035,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         callback = query.data
 
         if len(callback) > 2:
-            category = callback.split(SPLIT)[1]
+            category = callback.split(SPLIT, 1)[1]
             context.user_data["category_part"] = category
             first_call = True
 
@@ -1014,7 +1055,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     part_not_enough_available_count = False
 
     if callback == str(top_states["PRODUCT_CARDS"]) or first_call:
-        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(available_count__gt=0) & Q(category=category)).afirst()
 
         if not part:
             await empty_category(update, context)
@@ -1025,23 +1066,31 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["part_id"] = part_id
 
         if str(part_id) in order.parts:
-            if order.parts[str(part_id)] > part.available_count:
-                order.parts[str(part_id)] = part.available_count
+            # if part.available_count == 0:
+            #     part_deleted_from_catalog = True
+            #     order.parts.pop(str(part_id))
+            #     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts) elif
+            if order.parts[str(part_id)]['count'] > part.available_count:
+                order.parts[str(part_id)]['count'] = part.available_count
                 part_not_enough_available_count = True
                 await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     if callback == str(product_card_states["PREVIOUS"]):
-        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__lt=part_id)).alast()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(available_count__gt=0) & Q(category=category) & Q(part_id__lt=part_id)).alast()
 
         if not part:
-            part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).alast()
+            part = await models.Part.objects.filter(Q(is_available=True) & Q(available_count__gt=0) & Q(category=category)).alast()
 
         if part:
             context.user_data["part_id"] = part.part_id
 
             if str(part.part_id) in order.parts:
-                if order.parts[str(part.part_id)] > part.available_count:
-                    order.parts[str(part.part_id)] = part.available_count
+                # if part.available_count == 0:
+                #     part_deleted_from_catalog = True
+                #     order.parts.pop(str(part_id))
+                #     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
+                if order.parts[str(part.part_id)]['count'] > part.available_count:
+                    order.parts[str(part.part_id)]['count'] = part.available_count
                     part_not_enough_available_count = True
                     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         else:
@@ -1049,17 +1098,21 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return top_states["EMPTY_CATEGORY"]
   
     if callback == str(product_card_states["NEXT"]):
-        part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category) & Q(part_id__gt=part_id)).afirst()
+        part = await models.Part.objects.filter(Q(is_available=True) & Q(available_count__gt=0) & Q(category=category) & Q(part_id__gt=part_id)).afirst()
 
         if not part:
-            part = await models.Part.objects.filter(Q(is_available=True) & Q(category=category)).afirst()
+            part = await models.Part.objects.filter(Q(is_available=True) & Q(available_count__gt=0) & Q(category=category)).afirst()
 
         if part:
             context.user_data["part_id"] = part.part_id
 
             if str(part.part_id) in order.parts:
-                if order.parts[str(part.part_id)] > part.available_count:
-                    order.parts[str(part.part_id)] = part.available_count
+                # if part.available_count == 0:
+                #     part_deleted_from_catalog = True
+                #     order.parts.pop(str(part_id))
+                #     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
+                if order.parts[str(part.part_id)]['count'] > part.available_count:
+                    order.parts[str(part.part_id)]['count'] = part.available_count
                     part_not_enough_available_count = True
                     await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         else:
@@ -1068,32 +1121,45 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if callback == str(product_card_states["REMOVE"]):
         part = await models.Part.objects.aget(part_id=part_id)
-        if part.is_available == False:
+        if part.is_available == False or part.available_count == 0:
             part_deleted_from_catalog = True
+            if str(part_id) in order.parts:
+                order.parts.pop(str(part_id))
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         elif str(part_id) in order.parts:
-            if order.parts[str(part_id)] - 1 > part.available_count:
-                order.parts[str(part_id)] = part.available_count
+            if order.parts[str(part_id)]['count'] - 1 > part.available_count:
+                order.parts[str(part_id)]['count'] = part.available_count
                 part_not_enough_available_count = True
-            elif order.parts[str(part_id)] > 1:
-                order.parts[str(part_id)] -= 1
+            elif order.parts[str(part_id)]['count'] > 1:
+                order.parts[str(part_id)]['count'] -= 1
             else:
                 order.parts.pop(str(part_id))
             await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
 
     if callback == str(product_card_states["ADD"]):
         part = await models.Part.objects.aget(part_id=part_id)
-        if part.is_available == False:
+        if part.is_available == False or part.available_count == 0:
             part_deleted_from_catalog = True
+            if str(part_id) in order.parts:
+                order.parts.pop(str(part_id))
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         else:
             if str(part_id) in order.parts:
-                if order.parts[str(part_id)] + 1 <= part.available_count:
-                    order.parts[str(part_id)] += 1
+                if order.parts[str(part_id)]['count'] + 1 <= part.available_count:
+                    order.parts[str(part_id)]['count'] += 1
                 else:
-                    order.parts[str(part_id)] = part.available_count
+                    order.parts[str(part_id)]['count'] = part.available_count
                     part_not_enough_available_count = True
                 await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
             elif part.available_count > 0:
-                order.parts[str(part_id)] = 1
+                order.parts[str(part_id)] = {
+                    'name': part.name,
+                    'category': part.category,
+                    'description': part.description,
+                    'price': part.price,
+                    'count': 1,
+                    'image': part.image.url
+                }
                 await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
             else:
                 part_not_enough_available_count = True 
@@ -1101,13 +1167,30 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if entered_part_count is not None:
         await delete_last_msg(update)
         part = await models.Part.objects.aget(part_id=part_id)
-        if part.is_available == False:
+        if part.is_available == False or part.available_count == 0:
             part_deleted_from_catalog = True
+            if str(part_id) in order.parts:
+                order.parts.pop(str(part_id))
+                await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         elif entered_part_count > 0:
             if entered_part_count <= part.available_count:
-                order.parts[str(part_id)] = entered_part_count
+                order.parts[str(part_id)] = {
+                    'name': part.name,
+                    'category': part.category,
+                    'description': part.description,
+                    'price': part.price,
+                    'count': entered_part_count,
+                    'image': part.image.url
+                }
             else:
-                order.parts[str(part_id)] = part.available_count
+                order.parts[str(part_id)] = {
+                    'name': part.name,
+                    'category': part.category,
+                    'description': part.description,
+                    'price': part.price,
+                    'count': part.available_count,
+                    'image': part.image.url
+                }
                 part_not_enough_available_count = True
             await models.Order.objects.filter(order_id=order_id).aupdate(parts=order.parts)
         elif order.parts.get(str(part_id)) is not None:
@@ -1124,7 +1207,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if str(part.part_id) in order.parts:
-        count = order.parts[str(part.part_id)]
+        count = order.parts[str(part.part_id)]['count']
         cost = round(count * part.price, 2)
         text += (
             f"\nв корзине: *{count}шт.*\n"
@@ -1132,10 +1215,18 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     if part_deleted_from_catalog:
-        text += CONFIG.PART_DELETED_FROM_CATALOG_ERROR_TEXT
+        text += (
+            f"\n⚠️ *произошла ошибка*\n"
+            f"_товар только что был убран из каталога_\n"
+            f"_чтобы продолжить, выберите другой товар_\n"
+        )
 
     if part_not_enough_available_count:
-        text += CONFIG.PART_NOT_ENOUGH_AVAILABLE_COUNT_ERROR_TEXT
+        text += (
+            f"\n⚠️ *произошла ошибка*\n"
+            f"_выставлено максимально доступное количество товара, либо товар убран из корзины_\n"
+        )
+
 
     img = part.image
 
@@ -1181,7 +1272,7 @@ async def product_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     else:
         await context.bot.edit_message_media(
-            chat_id=update.effective_chat.id,
+            chat_id=context.user_data.get("user_id"),
             message_id=context.user_data.get("msg_id"),
             media=InputMediaPhoto(
                 media=img,
@@ -1200,7 +1291,10 @@ async def ask_for_enter_part_count_in_cart(update: Update, context: ContextTypes
     query = update.callback_query
     await query.answer()
 
-    text = CONFIG.ENTER_PARTS_COUNT_TEXT
+    text = (
+        f"введите количество товара, которое хотите добавить в корзину\n\n"
+        f"*0* - _удалить из корзины_"
+    )
     
     await query.edit_message_caption(
         caption=text,
@@ -1230,7 +1324,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
     parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
     async for part in parts:
-        count = part.available_count - order.parts[str(part.part_id)]
+        count = part.available_count - order.parts[str(part.part_id)]['count']
         await models.Part.objects.filter(part_id=part.part_id).aupdate(available_count=count)
         if count == 0:
             await models.Part.objects.filter(part_id=part.part_id).aupdate(is_available=False)
@@ -1254,20 +1348,22 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     
     text_to_admin = (
-        f"🔔 поступил заказ *№{order.order_id}* от @{user.username}\n\n"
+        f"🔔 поступил заказ *№{order.order_id}* от {user.username}\n\n"
         f"👤 *на имя*: {user.name}\n"
         f"📞 *телефон*: +375{user.phone_number}\n"
         f"📍 *адрес*: {user.delivery_address}\n\n"
         f"_товары в заказе:_\n"
     )
 
-    async for part in parts:
-        count = order.parts[str(part.part_id)]
-        price = part.price
+    for part_id in order.parts:
+        count = order.parts[part_id]['count']
+        price = order.parts[part_id]['price']
+        name = order.parts[part_id]['name']
+
         cost = round(count * price, 2)
 
         text_to_admin += (
-            f"● *{part.name}*, id: *{part.part_id}*\n"
+            f"● *{name}*, id: *{part_id}*\n"
             f"{count}шт. x {price}р.= _{cost}р._\n"
         )
 
@@ -1282,7 +1378,7 @@ async def confirm_order_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode=ParseMode.MARKDOWN,
         )
     
-    logger.info(f"[PTB] Order #{order.order_id} from user @{user.username} confirmed")
+    logger.info(f"[PTB] Order [id: {order.order_id}] from user [{user}] confirmed")
 
 
 async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1296,27 +1392,33 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order = await models.Order.objects.aget(order_id=order_id)
     order.cost = 0
 
-    user = await models.User.objects.aget(user_id=update.effective_chat.id)
+    user = await models.User.objects.aget(user_id=context.user_data.get("user_id"))
 
-    text = CONFIG.INTO_CART_TEXT
+    text = (
+        f"*[ 🛒 корзина ]*\n\n\n"
+    )
     reply_markup = None
 
     if bool(order.parts):
-        text += CONFIG.PARTS_PRESENTED_IN_CART_TEXT
+        text += (
+            f"_ваши товары в корзине:_\n\n"
+        )
 
         parts = models.Part.objects.filter(part_id__in=list(map(int, order.parts.keys())))
 
         if callback == str(top_states["INTO_CART"]):
             async for part in parts:
-                count = order.parts[str(part.part_id)]
+                count = order.parts[str(part.part_id)]['count']
                 price = part.price
                 cost = round(count * price, 2)
+                order.cost += cost
+
                 text += (
                     f"● *{part.name}*\n"
                     f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
-                order.cost += cost
 
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
@@ -1344,16 +1446,17 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if callback == str(into_cart_states["MAKE_ORDER"]):
             async for part in parts:
-                count = order.parts[str(part.part_id)]
+                count = order.parts[str(part.part_id)]['count']
                 price = part.price
                 cost = round(count * price, 2)
+                order.cost += cost
+
                 text += (
                     f"● *{part.name}*\n"
                     f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
-                order.cost += cost
-
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
@@ -1366,7 +1469,9 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"(при необходимости можно изменить в профиле)\n"
             )
 
-            text += CONFIG.ORDER_CONFIRMATION_TEXT
+            text += (
+                f"\n❔ *подтверждение заказа*. _вы уверены_?"
+            )
 
             keyboard = [
                 [
@@ -1384,38 +1489,44 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parts_id_not_enough_available_count = list()
 
             async for part in parts:
-                part_id = part.part_id
+                part_id = str(part.part_id)
 
-                if part.is_available == False:
+                if part.is_available == False or part.available_count == 0:
                     text += (
                         f"● *{part.name}*\n"
-                        f"{order.parts[str(part_id)]}шт.\n"
+                        f"{order.parts[part_id]['count']}шт.\n"
                         f"_[удалено из каталога]_,\n"
                     )
 
                     parts_id_deleted_from_catalog.append(part_id)
-                    order.parts.pop(str(part_id))
+                    order.parts.pop(part_id)
                 else:
-                    count = order.parts[str(part_id)]
-                    price = part.price
-                    cost = round(count * price, 2)
+                    order.parts[part_id]['name'] = part.name
+                    order.parts[part_id]['category'] = part.category
+                    order.parts[part_id]['description'] = part.description
+                    order.parts[part_id]['price'] = part.price
+                    count = order.parts[part_id]['count']
+                    order.parts[part_id]['image'] = part.image.url
 
-                    if order.parts[str(part_id)] > part.available_count:
+                    cost = round(count * part.price, 2)
+
+                    if count > part.available_count:
                         text += (
                             f"● *{part.name}*\n"
-                            f"{count}шт. x {price}р.= _{cost}р._\n"
+                            f"{part.available_count}шт. x {part.price}р.= _{cost}р._\n"
                             f"_[выст. макс. дост. кол-во]_,\n"
                         )
 
-                        order.parts[str(part_id)] = part.available_count
+                        order.parts[part_id]['count'] = part.available_count
                         parts_id_not_enough_available_count.append(part_id)
                     else:
                         text += (
                             f"● *{part.name}*\n"
-                            f"{count}шт. x {price}р.= _{cost}р._\n"
+                            f"{count}шт. x {part.price}р.= _{cost}р._\n"
                         )
                         order.cost += cost
 
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
@@ -1430,7 +1541,10 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                text += CONFIG.ORDER_CONFIRMATION_ERROR_TEXT
+                text += (
+                    f"\n⚠️ *произошла ошибка*\n"
+                    f"внимание, в корзине проведены изменения, продолжить?"
+                )
             else:
                 await confirm_order_to_db(update, context, order)
                 return top_states["END"]
@@ -1456,24 +1570,21 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_caption(
+    if callback == str(top_states["INTO_CART"]):
+        await query.edit_message_media(
+                media=InputMediaPhoto(
+                    media=f"{URL}/static/img/bot/malarka_shop_bot_cart.jpg?a={CONFIG.TIMESTAMP_START}",
+                    caption=text,
+                    parse_mode=ParseMode.MARKDOWN,
+                ),
+                reply_markup=reply_markup
+            )
+    else:
+        await query.edit_message_caption(
             caption=text,
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
         )
-
-    if callback == str(top_states["INTO_CART"]):
-        try: # ingnore telegram.error.BadRequest: Message on the same message
-            await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=f"{URL}/static/img/bot/cart.jpg",
-                        caption=text,
-                        parse_mode=ParseMode.MARKDOWN,
-                    ),
-                    reply_markup=reply_markup
-                )
-        except:
-            pass
         
     return top_states["INTO_CART"]
 
@@ -1563,7 +1674,7 @@ ptb_application.add_handler(
                 ),
                 CallbackQueryHandler(
                     product_cards,
-                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[A-Z]{1,8}$"
+                    pattern="^" + str(top_states["PRODUCT_CARDS"]) + "_[a-zA-Z_]{1,64}$"
                 )
             ],
 
@@ -1662,16 +1773,16 @@ ptb_application.add_handler(
 
 
             user_profile_edit_states["GET_NAME"]: [
-                MessageHandler(filters.Regex("^[а-яёА-Я ]{2,32}$"), get_name),
-                MessageHandler(~filters.Regex("^[а-яёА-Я ]{2,32}$"), delete_last_msg)
+                MessageHandler(filters.Regex(".{1,64}"), get_name),
+                MessageHandler(~filters.Regex(".{1,64}"), delete_last_msg)
             ],
             user_profile_edit_states["GET_PHONE_NUMBER"]: [
                 MessageHandler(filters.Regex("^[0-9]{9}$"), get_phone_number),
                 MessageHandler(~filters.Regex("^[0-9]{9}$"), delete_last_msg)
             ],
             user_profile_edit_states["GET_DELIVERY_ADDRESS"]: [
-                MessageHandler(filters.Regex("^[0-9а-яёА-Я/,. ]{2,128}$"), get_delivery_address),
-                MessageHandler(~filters.Regex("^[0-9а-яёА-Я/,. ]{2,128}$"), delete_last_msg)
+                MessageHandler(filters.Regex(".{1,128}"), get_delivery_address),
+                MessageHandler(~filters.Regex(".{1,128}"), delete_last_msg)
             ],
 
             
