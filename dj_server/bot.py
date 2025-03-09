@@ -33,7 +33,10 @@ from dj_server.credentials import TOKEN, URL, PORT
 
 # Enable logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename=f'{datetime.now().strftime('%Y-%m-%d')}.log',
+    level=logging.INFO,
+    encoding='utf-8'
 )
 # set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1415,6 +1418,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
@@ -1452,6 +1456,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"{count}шт. x {price}р.= _{cost}р._\n"
                 )
 
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
@@ -1521,6 +1526,7 @@ async def into_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                         order.cost += cost
 
+            order.cost = round(order.cost, 2)
             text += (
                 f"\n💵 *итого:* _{order.cost}р._\n"
             )
