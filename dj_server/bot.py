@@ -34,7 +34,7 @@ from dj_server.credentials import TOKEN, URL, PORT
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    filename=f'{datetime.now().strftime('%Y-%m-%d')}.log',
+    filename=f'{datetime.now().strftime("%Y-%m-%d")}.log',
     level=logging.INFO,
     encoding='utf-8'
 )
